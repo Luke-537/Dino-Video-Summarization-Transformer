@@ -16,7 +16,7 @@ export CUDA_VISIBLE_DEVICES=0
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
-  eval_linear.py \
+  eval_similarity_dino.py \
   --arch "vit_base" \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 20 \

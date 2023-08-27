@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_PATH="/home/reutemann/svt"
+PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer/svt"
 DATA_PATH="/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
 EXP_NAME="svt_test"
 
