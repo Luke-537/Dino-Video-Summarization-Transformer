@@ -208,7 +208,7 @@ def train_svt(args):
             student = get_vit_base_patch16_224(cfg=config, no_head=True)
             teacher = get_vit_base_patch16_224(cfg=config, no_head=True)
         embed_dim = student.embed_dim
-
+    # load head student and teacher
         if args.pretrained_rgb is not None:
             state_dict = torch.load(args.pretrained_rgb)["teacher"]
             state_dict = {x[len("backbone."):]: y for x, y in state_dict.items() if x.startswith("backbone.")}

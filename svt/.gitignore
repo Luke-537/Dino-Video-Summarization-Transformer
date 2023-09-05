@@ -3,6 +3,7 @@
 .DS_Store
 checkpoints
 model_k400_pretrained
+check_for_head.py
 /data
 
 # Byte-compiled / optimized / DLL files

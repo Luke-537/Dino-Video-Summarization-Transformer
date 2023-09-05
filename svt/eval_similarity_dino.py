@@ -1,21 +1,11 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-# 
-#     http://www.apache.org/licenses/LICENSE-2.0
-# 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 import argparse
 import json
 import os
 import torch
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
+import torch.nn.functional as F
+import numpy as np
 from pathlib import Path
 from torch import nn
 from tqdm import tqdm
@@ -25,300 +15,124 @@ from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3
 from utils import utils
 from utils.meters import TestMeter
 from utils.parser import load_config
+from vision_transformer import DINOHead, MultiDINOHead
 
 
-def eval_linear(args):
+def eval_dino(args):
     utils.init_distributed_mode(args)
-    print("git:\n  {}\n".format(utils.get_sha()))
-    print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
     cudnn.benchmark = True
-    os.makedirs(args.output_dir, exist_ok=True)
-    json.dump(vars(args), open(f"{args.output_dir}/config.json", "w"), indent=4)
-
-    # ============ preparing data ... ============
+    
     config = load_config(args)
-    # config.DATA.PATH_TO_DATA_DIR = f"{os.path.expanduser('~')}/repo/mmaction2/data/{args.dataset}/splits"
-    # config.DATA.PATH_PREFIX = f"{os.path.expanduser('~')}/repo/mmaction2/data/{args.dataset}/videos"
-    config.TEST.NUM_SPATIAL_CROPS = 1
-    if args.dataset == "ucf101":
-        dataset_train = UCF101(cfg=config, mode="train", num_retries=10)
-        dataset_val = UCF101(cfg=config, mode="val", num_retries=10)
-        config.TEST.NUM_SPATIAL_CROPS = 3
-        multi_crop_val = UCF101(cfg=config, mode="val", num_retries=10)
-    elif args.dataset == "hmdb51":
-        dataset_train = HMDB51(cfg=config, mode="train", num_retries=10)
-        dataset_val = HMDB51(cfg=config, mode="val", num_retries=10)
-        config.TEST.NUM_SPATIAL_CROPS = 3
-        multi_crop_val = HMDB51(cfg=config, mode="val", num_retries=10)
-    elif args.dataset == "kinetics400":
-        dataset_train = Kinetics(cfg=config, mode="train", num_retries=10)
-        dataset_val = Kinetics(cfg=config, mode="val", num_retries=10)
-        config.TEST.NUM_SPATIAL_CROPS = 3
-        multi_crop_val = Kinetics(cfg=config, mode="val", num_retries=10)
-    else:
-        raise NotImplementedError(f"invalid dataset: {args.dataset}")
-
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset_train)
-    train_loader = torch.utils.data.DataLoader(
-        dataset_train,
-        sampler=sampler,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
-    )
-    val_loader = torch.utils.data.DataLoader(
-        dataset_val,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
-    )
-
-    multi_crop_val_loader = torch.utils.data.DataLoader(
-        multi_crop_val,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
-    )
-
-    print(f"Data loaded with {len(dataset_train)} train and {len(dataset_val)} val imgs.")
-
-    # ============ building network ... ============
-    if config.DATA.USE_FLOW or config.MODEL.TWO_TOKEN:
-        model = get_aux_token_vit(cfg=config, no_head=True)
-        model_embed_dim = 2 * model.embed_dim
-    else:
-        if args.arch == "vit_base":
-            model = get_vit_base_patch16_224(cfg=config, no_head=True)
-            model_embed_dim = model.embed_dim
-        elif args.arch == "swin":
-            model = SwinTransformer3D(depths=[2, 2, 18, 2], embed_dim=128, num_heads=[4, 8, 16, 32])
-            model_embed_dim = 1024
-        else:
-            raise Exception(f"invalid model: {args.arch}")
+    
+    model = get_vit_base_patch16_224(cfg=config, no_head=False)
 
     ckpt = torch.load(args.pretrained_weights)
-    #  select_ckpt = 'motion_teacher' if args.use_flow else "teacher"
-    if "teacher" in ckpt:
-        ckpt = ckpt["teacher"]
     renamed_checkpoint = {x[len("backbone."):]: y for x, y in ckpt.items() if x.startswith("backbone.")}
-    msg = model.load_state_dict(renamed_checkpoint, strict=False)
-    print(f"Loaded model with msg: {msg}")
+
+    model.load_state_dict(renamed_checkpoint, strict=False)
     model.cuda()
     model.eval()
-    print(f"Model {args.arch} {args.patch_size}x{args.patch_size} built.")
-    # load weights to evaluate
 
-    linear_classifier = LinearClassifier(model_embed_dim * (args.n_last_blocks + int(args.avgpool_patchtokens)),
-                                         num_labels=args.num_labels)
-    linear_classifier = linear_classifier.cuda()
-    linear_classifier = nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[args.gpu])
+    # print("Model's state_dict:")
+    # for param_tensor in model.state_dict():
+    #    print(param_tensor, "\t", model.state_dict()[param_tensor].size())
 
-    if args.lc_pretrained_weights:
-        lc_ckpt = torch.load(args.lc_pretrained_weights)
-        msg = linear_classifier.load_state_dict(lc_ckpt['state_dict'])
-        print(f"Loaded linear classifier weights with msg: {msg}")
-        test_stats = validate_network_multi_view(multi_crop_val_loader, model, linear_classifier, args.n_last_blocks,
-                                                 args.avgpool_patchtokens, config)
-        # test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
-        print(test_stats)
-        return True
+    student = get_vit_base_patch16_224(cfg=config, no_head=False)
+    teacher = get_vit_base_patch16_224(cfg=config, no_head=False)
+
+    student, teacher = student.cuda(), teacher.cuda()
 
 
-    # set optimizer
-    optimizer = torch.optim.SGD(
-        linear_classifier.parameters(),
-        args.lr * (args.batch_size_per_gpu * utils.get_world_size()) / 256., # linear scaling rule
-        momentum=0.9,
-        weight_decay=0, # we do not apply weight decay
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, eta_min=0)
-
-    # Optionally resume from a checkpoint
-    to_restore = {"epoch": 0, "best_acc": 0.}
-    utils.restart_from_checkpoint(
-        os.path.join(args.output_dir, "checkpoint.pth.tar"),
-        run_variables=to_restore,
-        state_dict=linear_classifier,
-        optimizer=optimizer,
-        scheduler=scheduler,
-    )
-    start_epoch = to_restore["epoch"]
-    best_acc = to_restore["best_acc"]
-
-    for epoch in range(start_epoch, args.epochs):
-        train_loader.sampler.set_epoch(epoch)
-
-        train_stats = train(model, linear_classifier, optimizer, train_loader, epoch, args.n_last_blocks, args.avgpool_patchtokens)
-        scheduler.step()
-
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     'epoch': epoch}
-        if epoch % args.val_freq == 0 or epoch == args.epochs - 1:
-            test_stats = validate_network(val_loader, model, linear_classifier, args.n_last_blocks, args.avgpool_patchtokens)
-            print(f"Accuracy at epoch {epoch} of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            best_acc = max(best_acc, test_stats["acc1"])
-            print(f'Max accuracy so far: {best_acc:.2f}%')
-            log_stats = {**{k: v for k, v in log_stats.items()},
-                         **{f'test_{k}': v for k, v in test_stats.items()}}
-        if utils.is_main_process():
-            with (Path(args.output_dir) / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-            save_dict = {
-                "epoch": epoch + 1,
-                "state_dict": linear_classifier.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "scheduler": scheduler.state_dict(),
-                "best_acc": best_acc,
-            }
-            torch.save(save_dict, os.path.join(args.output_dir, "checkpoint.pth.tar"))
-
-    test_stats = validate_network_multi_view(multi_crop_val_loader, model, linear_classifier, args.n_last_blocks,
-                                             args.avgpool_patchtokens, config)
-    print(test_stats)
-
-    print("Training of the supervised linear classifier on frozen features completed.\n"
-          "Top-1 test accuracy: {acc:.1f}".format(acc=best_acc))
-
-
-def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
-    linear_classifier.train()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
-    for (inp, target, sample_idx, meta) in metric_logger.log_every(loader, 20, header):
-        # move to gpu
-        inp = inp[0].cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
-
-        # forward
-        with torch.no_grad():
-            # intermediate_output = model.get_intermediate_layers(inp, n)
-            # output = [x[:, 0] for x in intermediate_output]
-            # if avgpool:
-            #     output.append(torch.mean(intermediate_output[-1][:, 1:], dim=1))
-            # output = torch.cat(output, dim=-1)
-
-            output = model(inp)
-
-        output = linear_classifier(output)
-
-        # compute cross entropy loss
-        loss = nn.CrossEntropyLoss()(output, target)
-
-        # compute the gradients
-        optimizer.zero_grad()
-        loss.backward()
-
-        # step
-        optimizer.step()
-
-        # log
-        torch.cuda.synchronize()
-        metric_logger.update(loss=loss.item())
-        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-    # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
-
-
-@torch.no_grad()
-def validate_network(val_loader, model, linear_classifier, n, avgpool):
-    linear_classifier.eval()
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Test:'
-    for (inp, target, sample_idx, meta) in metric_logger.log_every(val_loader, 20, header):
-        # move to gpu
-        inp = inp.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
-
-        # forward
-        with torch.no_grad():
-            # intermediate_output = model.get_intermediate_layers(inp, n)
-            # output = [x[:, 0] for x in intermediate_output]
-            # if avgpool:
-            #     output.append(torch.mean(intermediate_output[-1][:, 1:], dim=1))
-            # output = torch.cat(output, dim=-1)
-            output = model(inp)
-        output = linear_classifier(output)
-        loss = nn.CrossEntropyLoss()(output, target)
-
-        if linear_classifier.module.num_labels >= 5:
-            acc1, acc5 = utils.accuracy(output, target, topk=(1, 5))
+class DINOLoss(nn.Module):
+    def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
+                 warmup_teacher_temp_epochs, nepochs, student_temp=0.1,
+                 center_momentum=0.9, global_crops=2, two_token=False):
+        super().__init__()
+        self.student_temp = student_temp
+        self.center_momentum = center_momentum
+        self.n_crops = ncrops
+        self.global_crops = global_crops
+        self.two_token = two_token
+        if self.two_token:
+            self.n_crops = 4
+            self.global_crops = 2
+            self.register_buffer("center", torch.zeros(2, out_dim))
         else:
-            acc1, = utils.accuracy(output, target, topk=(1,))
+            self.register_buffer("center", torch.zeros(1, out_dim))
+        # we apply a warm up for the teacher temperature because
+        # a too high temperature makes the training instable at the beginning
+        self.teacher_temp_schedule = np.concatenate((
+            np.linspace(warmup_teacher_temp,
+                        teacher_temp, warmup_teacher_temp_epochs),
+            np.ones(nepochs - warmup_teacher_temp_epochs) * teacher_temp
+        ))
 
-        batch_size = inp.shape[0]
-        metric_logger.update(loss=loss.item())
-        metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-        if linear_classifier.module.num_labels >= 5:
-            metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
-    if linear_classifier.module.num_labels >= 5:
-        print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
-              .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
-    else:
-        print('* Acc@1 {top1.global_avg:.3f} loss {losses.global_avg:.3f}'
-              .format(top1=metric_logger.acc1, losses=metric_logger.loss))
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    def forward(self, student_output, teacher_output, epoch):
+        """
+        Cross-entropy between softmax outputs of the teacher and student networks.
+        """
+        total_loss = 0
+        n_loss_terms = 0
+        if self.two_token:
+            student_out = [x / self.student_temp for x in student_output]
+            student_out = [x.chunk(self.n_crops) for x in student_out]
 
+            # teacher centering and sharpening
+            temp = self.teacher_temp_schedule[epoch]
+            teacher_out = [F.softmax((x - self.center[idx]) / temp, dim=-1) for idx, x in enumerate(teacher_output)]
+            teacher_out = [x.detach().chunk(self.global_crops) for x in teacher_out]
 
-@torch.no_grad()
-def validate_network_multi_view(val_loader, model, linear_classifier, n, avgpool, cfg):
-    linear_classifier.eval()
-    test_meter = TestMeter(
-        len(val_loader.dataset)
-        // (cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS),
-        cfg.TEST.NUM_ENSEMBLE_VIEWS * cfg.TEST.NUM_SPATIAL_CROPS,
-        args.num_labels,
-        len(val_loader),
-        cfg.DATA.MULTI_LABEL,
-        cfg.DATA.ENSEMBLE_METHOD,
-        )
-    test_meter.iter_tic()
+            for iv in range(len(student_out[0])):
+                if iv < 2:
+                    q = teacher_out[0][0]
+                    v = student_out[0][iv]
+                    loss = torch.sum(-q * F.log_softmax(v, dim=-1), dim=-1)
+                else:
+                    q = teacher_out[1][1]
+                    v = student_out[1][iv]
+                    loss = torch.sum(-q * F.log_softmax(v, dim=-1), dim=-1)
+                total_loss += loss.mean()
+                n_loss_terms += 1
+        else:
+            student_out = student_output / self.student_temp
+            student_out = student_out.chunk(self.n_crops)
 
-    for cur_iter, (inp, target, sample_idx, meta) in tqdm(enumerate(val_loader), total=len(val_loader)):
-        # move to gpu
-        inp = inp.cuda(non_blocking=True)
-        # target = target.cuda(non_blocking=True)
-        test_meter.data_toc()
+            # teacher centering and sharpening
+            temp = self.teacher_temp_schedule[epoch]
+            teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)
+            teacher_out = teacher_out.detach().chunk(self.global_crops)
 
-        # forward
-        with torch.no_grad():
-            output = model(inp)
-        output = linear_classifier(output)
+            for iq, q in enumerate(teacher_out):
+                for v in range(len(student_out)):
+                    if v == iq:
+                        # we skip cases where student and teacher operate on the same view
+                        continue
+                    loss = torch.sum(-q * F.log_softmax(student_out[v], dim=-1), dim=-1)
+                    total_loss += loss.mean()
+                    n_loss_terms += 1
+        total_loss /= n_loss_terms
+        self.update_center(teacher_output)
+        return total_loss
 
-        output = output.cpu()
-        target = target.cpu()
-        sample_idx = sample_idx.cpu()
+    @torch.no_grad()
+    def update_center(self, teacher_output):
+        """
+        Update center used for teacher output.
+        """
+        if isinstance(teacher_output, (tuple, list)):
+            batch_center = [torch.sum(x, dim=0, keepdim=True) for x in teacher_output]
+            dist.all_reduce(batch_center[0])
+            dist.all_reduce(batch_center[1])
+            batch_center = [x / (len(teacher_output[0]) * dist.get_world_size()) for x in batch_center]
+            self.center[0, :] = self.center[0, :] * self.center_momentum + batch_center[0] * (1 - self.center_momentum)
+            self.center[1, :] = self.center[1, :] * self.center_momentum + batch_center[1] * (1 - self.center_momentum)
+        else:
+            batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
+            dist.all_reduce(batch_center)
+            batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
 
-        test_meter.iter_toc()
-        # Update and log stats.
-        test_meter.update_stats(
-            output.detach(), target.detach(), sample_idx.detach()
-        )
-        test_meter.log_iter_stats(cur_iter)
-
-        test_meter.iter_tic()
-
-    test_meter.finalize_metrics()
-    return test_meter.stats
-
-
-class LinearClassifier(nn.Module):
-    """Linear layer to train on top of frozen features"""
-    def __init__(self, dim, num_labels=1000):
-        super(LinearClassifier, self).__init__()
-        self.num_labels = num_labels
-        self.linear = nn.Linear(768, num_labels)
-        self.linear.weight.data.normal_(mean=0.0, std=0.01)
-        self.linear.bias.data.zero_()
-
-    def forward(self, x):
-        # flatten
-        x = x.view(x.size(0), -1)
-
-        # linear layer
-        return self.linear(x)
+            # ema update
+            self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 
 if __name__ == '__main__':
@@ -358,4 +172,4 @@ if __name__ == '__main__':
     parser.add_argument("--opts", help="See utils/defaults.py for all options", default=None, nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
-    eval_linear(args)
+    eval_dino(args)

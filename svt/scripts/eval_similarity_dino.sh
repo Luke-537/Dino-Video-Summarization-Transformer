@@ -30,3 +30,4 @@ python -m torch.distributed.launch \
   DATA.PATH_TO_DATA_DIR "${DATA_PATH}/annotations" \
   DATA.PATH_PREFIX "${DATA_PATH}/train" \
   DATA.USE_FLOW False
+  
