@@ -6,6 +6,8 @@ import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
+import cv2
+import matplotlib.pyplot as plt
 from pathlib import Path
 from torch import nn
 from tqdm import tqdm
@@ -18,29 +20,128 @@ from utils.parser import load_config
 from vision_transformer import DINOHead, MultiDINOHead
 
 
-def eval_dino(args):
+def eval_dino(args, show_state_dict, show_loader):
     utils.init_distributed_mode(args)
     cudnn.benchmark = True
     
     config = load_config(args)
     
+    # Load the basic model class
     model = get_vit_base_patch16_224(cfg=config, no_head=False)
 
+    # Load the pretrained checkpoint
     ckpt = torch.load(args.pretrained_weights)
     renamed_checkpoint = {x[len("backbone."):]: y for x, y in ckpt.items() if x.startswith("backbone.")}
 
+    # Load the corresponding state dict and switch to eval mode
     model.load_state_dict(renamed_checkpoint, strict=False)
     model.cuda()
     model.eval()
 
-    # print("Model's state_dict:")
-    # for param_tensor in model.state_dict():
-    #    print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+    # Print the state dict if argument is set
+    if show_state_dict:
+        print("Model's state_dict:")
+        for param_tensor in model.state_dict():
+            print(param_tensor, "\t", model.state_dict()[param_tensor].size())
 
+    # Load teacher and student model class
     student = get_vit_base_patch16_224(cfg=config, no_head=False)
     teacher = get_vit_base_patch16_224(cfg=config, no_head=False)
+    student.load_state_dict(renamed_checkpoint, strict=False)
+    teacher.load_state_dict(renamed_checkpoint, strict=False)
 
     student, teacher = student.cuda(), teacher.cuda()
+
+    student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu], find_unused_parameters=False)
+    teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
+
+    # load val dataset
+    dataset_val = Kinetics(cfg=config, mode="val", num_retries=10)
+    config.TEST.NUM_SPATIAL_CROPS = 3
+
+    val_loader = torch.utils.data.DataLoader(
+        dataset_val,
+        batch_size=args.batch_size_per_gpu,
+        num_workers=args.num_workers,
+        pin_memory=True,
+    )
+
+    if show_loader:
+        val_features = val_loader[0]
+        print(f"Feature batch shape: {val_features.size()}")
+        img = val_features[0].squeeze()
+        plt.imshow(img, cmap="gray")
+        plt.show()
+
+
+    # Instantiate dino loss
+    dino_loss = DINOLoss(
+        args.out_dim,
+        args.local_crops_number + 2,  # total number of crops = 2 global crops + local_crops_number
+        args.warmup_teacher_temp,
+        args.teacher_temp,
+        args.warmup_teacher_temp_epochs,
+        args.epochs,
+        global_crops=2,
+        two_token=config.MODEL.TWO_TOKEN
+    )
+    dino_loss = dino_loss.cuda()
+
+    #breakpoint()
+
+    for i, (images, x, y, z) in enumerate(val_loader):
+
+        images = images.cuda(non_blocking=True)
+
+        # convert the tensor to a numpy array
+        array = images[0].cpu().numpy()
+        # convert the numpy array to the correct format for OpenCV
+        array = (array * 224).astype('uint8').transpose(0, 2, 3, 1)
+        # create a cv2.VideoWriter object
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter('output.mp4', fourcc, 20.0, (224, 224))
+        # release the cv2.VideoWriter object
+        out.release()
+
+        # write the frames to the cv2.VideoWriter object
+        for i in range(3):
+            out.write(array[i])
+
+        with torch.no_grad():
+            student_output = student(images)
+            teacher_output = teacher(images[:2]) # only the two global views
+
+        breakpoint()
+
+        # show teacher and student output
+
+        # compute loss for each individual frame?
+    
+        loss = dino_loss(student_output, teacher_output, 0) # dummy value for epoch
+
+
+def export_loss():
+
+    return None
+
+
+def extract_frames_single_video(video_path):
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(frame)
+    cap.release()
+
+    # Convert list of frames to tensor
+    tensor_frames = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in frames])
+    
+    #frames = [frame.cuda(non_blocking=True) for frame in frames]
+
+    return tensor_frames
 
 
 class DINOLoss(nn.Module):
@@ -171,5 +272,43 @@ if __name__ == '__main__':
                         default="models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml")
     parser.add_argument("--opts", help="See utils/defaults.py for all options", default=None, nargs=argparse.REMAINDER)
 
+    # Model parameters
+    parser.add_argument('--out_dim', default=768, type=int, help="""Dimensionality of
+        the DINO head output. For complex and large datasets large values (like 65k) work well.""")
+    parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
+        help="""Whether or not to weight normalize the last layer of the DINO head.
+        Not normalizing leads to better performance but can make the training unstable.
+        In our experiments, we typically set this paramater to False with vit_small and True with vit_base.""")
+    parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA
+        parameter for teacher update. The value is increased to 1 during training with cosine schedule.
+        We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
+    parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag,
+        help="Whether to use batch normalizations in projection head (Default: False)")
+
+    # Temperature teacher parameters
+    parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
+        help="""Initial value for the teacher temperature: 0.04 works well in most cases.
+        Try decreasing it if the training loss does not decrease.""")
+    parser.add_argument('--teacher_temp', default=0.04, type=float, help="""Final value (after linear warmup)
+        of the teacher temperature. For most experiments, anything above 0.07 is unstable. We recommend
+        starting with the default value of 0.04 and increase this slightly if needed.""")
+    parser.add_argument('--warmup_teacher_temp_epochs', default=0, type=int,
+        help='Number of warmup epochs for the teacher temperature (Default: 30).')
+    
+    # Multi-crop parameters
+    parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
+                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+        Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we
+        recommand using a wider range of scale ("--global_crops_scale 0.14 1." for example)""")
+    parser.add_argument('--local_crops_number', type=int, default=8, help="""Number of small
+        local views to generate. Set this parameter to 0 to disable multi-crop training.
+        When disabling multi-crop we recommend to use "--global_crops_scale 0.14 1." """)
+    parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
+                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
+        Used for small local view cropping of multi-crop.""")
+
     args = parser.parse_args()
-    eval_dino(args)
+    show_state_dict = False
+    show_loader = False
+
+    eval_dino(args, show_state_dict, show_loader)
