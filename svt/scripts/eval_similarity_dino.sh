@@ -21,13 +21,13 @@ python -m torch.distributed.launch \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 20 \
   --lr 0.001 \
-  --batch_size_per_gpu 16 \
+  --batch_size_per_gpu 1 \
   --num_workers 4 \
   --num_labels 400 \
   --dataset "$DATASET" \
   --output_dir "checkpoints/eval/$EXP_NAME" \
   --opts \
   DATA.PATH_TO_DATA_DIR "${DATA_PATH}/annotations" \
-  DATA.PATH_PREFIX "${DATA_PATH}/val" \
+  DATA.PATH_PREFIX "${DATA_PATH}/test" \
   DATA.USE_FLOW False
   

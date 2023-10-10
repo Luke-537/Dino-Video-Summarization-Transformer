@@ -4,7 +4,7 @@ from tqdm import tqdm
 import json
 
 root_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400"
-split = "train"
+split = "test"
 anno_folder = "new_annotations"
 
 video_list = set(os.listdir(f"{root_path}/{split}_resized"))

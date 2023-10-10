@@ -1,5 +1,6 @@
 import argparse
 import json
+import csv
 import os
 import torch
 import torch.backends.cudnn as cudnn
@@ -8,19 +9,20 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import torchvision.io as io
 from pathlib import Path
 from torch import nn
 from tqdm import tqdm
+from torchvision.transforms import functional as tf
 
-from datasets import UCF101, HMDB51, Kinetics
+from datasets import UCF101, HMDB51, Kinetics, KineticsCustom
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D
 from utils import utils
 from utils.meters import TestMeter
 from utils.parser import load_config
-from vision_transformer import DINOHead, MultiDINOHead
 
 
-def eval_dino(args, show_state_dict, show_loader):
+def eval_dino(args, video_path):
     utils.init_distributed_mode(args)
     cudnn.benchmark = True
     
@@ -38,11 +40,13 @@ def eval_dino(args, show_state_dict, show_loader):
     model.cuda()
     model.eval()
 
-    # Print the state dict if argument is set
-    if show_state_dict:
-        print("Model's state_dict:")
-        for param_tensor in model.state_dict():
-            print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+    """
+    # Printing the state dict
+
+    print("Model's state_dict:")
+    for param_tensor in model.state_dict():
+        print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+    """
 
     # Load teacher and student model class
     student = get_vit_base_patch16_224(cfg=config, no_head=False)
@@ -55,95 +59,160 @@ def eval_dino(args, show_state_dict, show_loader):
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu], find_unused_parameters=False)
     teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
 
-    # load val dataset
-    dataset_val = Kinetics(cfg=config, mode="val", num_retries=10)
-    config.TEST.NUM_SPATIAL_CROPS = 3
+    local_clip_size = 3
+    global_clip_size = 61
+    
+    
+    # load test dataset
+    dataset_test = KineticsCustom(
+        cfg=config,
+        mode="test",
+        local_clip_size=local_clip_size, 
+        global_clip_size=global_clip_size
+    )
 
-    val_loader = torch.utils.data.DataLoader(
-        dataset_val,
+    test_loader = torch.utils.data.DataLoader(
+        dataset_test,
         batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
     )
 
-    if show_loader:
-        val_features = val_loader[0]
-        print(f"Feature batch shape: {val_features.size()}")
-        img = val_features[0].squeeze()
-        plt.imshow(img, cmap="gray")
-        plt.show()
+    #breakpoint()
 
+    """
+    # load single video as test
+    tensor_test = extract_frames_single_video(video_path)
+
+    # get local and global views for each frame of the video
+    local_views, global_views = get_views_of_video(tensor_test, local_clip_size, global_clip_size)
+
+    # is stretched video right?
+    #save_tensor_as_video(tensor_test)
+    """
 
     # Instantiate dino loss
     dino_loss = DINOLoss(
         args.out_dim,
-        args.local_crops_number + 2,  # total number of crops = 2 global crops + local_crops_number
+        2,  # total number of crops = 1 global crops +  1 local crop
         args.warmup_teacher_temp,
         args.teacher_temp,
         args.warmup_teacher_temp_epochs,
         args.epochs,
-        global_crops=2,
+        global_crops=1,
         two_token=config.MODEL.TWO_TOKEN
     )
     dino_loss = dino_loss.cuda()
 
-    #breakpoint()
-
-    for i, (images, x, y, z) in enumerate(val_loader):
-
-        images = images.cuda(non_blocking=True)
-
-        # convert the tensor to a numpy array
-        array = images[0].cpu().numpy()
-        # convert the numpy array to the correct format for OpenCV
-        array = (array * 224).astype('uint8').transpose(0, 2, 3, 1)
-        # create a cv2.VideoWriter object
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter('output.mp4', fourcc, 20.0, (224, 224))
-        # release the cv2.VideoWriter object
-        out.release()
-
-        # write the frames to the cv2.VideoWriter object
-        for i in range(3):
-            out.write(array[i])
-
-        with torch.no_grad():
-            student_output = student(images)
-            teacher_output = teacher(images[:2]) # only the two global views
-
+    for i, (local_views, global_views, file_name) in enumerate(test_loader):
         breakpoint()
 
-        # show teacher and student output
+        loss = []
+        for x in range(len(local_views)):
+            print((x+1), "/", len(local_views))
 
-        # compute loss for each individual frame?
-    
-        loss = dino_loss(student_output, teacher_output, 0) # dummy value for epoch
+            local_view = local_views[x].cuda(non_blocking=True)
+            global_view = global_views[x].cuda(non_blocking=True)
 
+            with torch.no_grad():
+                student_output = student(local_view)
+                teacher_output = teacher(global_view)
 
-def export_loss():
+            for y in range(len(student_output)):
+                loss.append(dino_loss(student_output[y], teacher_output[y]).item())
 
-    return None
+        export_loss(loss, file_name[0], 'loss_k400_resized_test/loss_output_3.json')
 
-
-def extract_frames_single_video(video_path):
-    cap = cv2.VideoCapture(video_path)
-    frames = []
-    while True:
-        ret, frame = cap.read()
-        if not ret:
+        if i >= 2:
             break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frames.append(frame)
-    cap.release()
-
-    # Convert list of frames to tensor
-    tensor_frames = torch.stack([torch.tensor(frame).permute(2, 0, 1) for frame in frames])
-    
-    #frames = [frame.cuda(non_blocking=True) for frame in frames]
-
-    return tensor_frames
 
 
+def save_tensor_as_video(tensor):
+    tensor = tensor.permute(1, 2, 3, 0)
+
+    io.write_video('test_videos/video_test_1.mp4', tensor, fps=30)
+
+
+def export_loss(loss_list, video_path, file_path):
+    video_name = os.path.basename(video_path)
+    video_name_without_extension, extension = os.path.splitext(video_name)
+
+    video_dict = {video_name_without_extension: loss_list}
+
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+
+        # Update data
+        merged_dict = data.copy()
+        merged_dict.update(video_dict)
+
+        with open(file_path, 'w') as file:
+            json.dump(merged_dict, file)
+
+    else:
+        with open(file_path, 'w') as file:
+            json.dump(video_dict, file)
+
+
+"""
+def extract_frames_single_video(video_path):
+    video, audio, info = io.read_video(video_path, pts_unit='sec')
+
+    video = video.permute(3, 0, 1, 2)
+
+    tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
+
+    return tensor_resized.to(torch.float)
+
+
+def get_views_first_frame(frames):
+    local_view = frames.permute(1, 0, 2, 3)
+    local_view = local_view[:3].permute(1, 0, 2, 3)
+
+    global_view = frames.permute(1, 0, 2, 3)
+    global_view = global_view[:30].permute(1, 0, 2, 3)
+
+    return local_view, global_view
+
+
+def get_views_of_video(frames, local_size, global_size):
+    frames = frames.permute(1, 0, 2, 3)
+
+    loc = int(local_size / 2)
+    glob = int(global_size / 2)
+
+    local_views = []
+    global_views = []
+
+    for i in range(len(frames)):
+        j = i-loc
+        k = i+loc+1
+        l = i-glob
+        m = i+glob+1
+
+        if j < 0:
+            j = 0
+
+        if k >= len(frames):
+            k = len(frames)
+
+        if l < 0:
+            l = 0
+
+        if m >= len(frames):
+            m = len(frames)
+
+        local_views.append(frames[j:k].permute(1, 0, 2, 3))
+        global_views.append(frames[l:m].permute(1, 0, 2, 3))
+
+    return local_views, global_views
+"""
+
+
+# DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 
+# before it needed at least 2 local views
+# also removed the check if model is two token for readability
 class DINOLoss(nn.Module):
     def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
                  warmup_teacher_temp_epochs, nepochs, student_temp=0.1,
@@ -154,85 +223,46 @@ class DINOLoss(nn.Module):
         self.n_crops = ncrops
         self.global_crops = global_crops
         self.two_token = two_token
-        if self.two_token:
-            self.n_crops = 4
-            self.global_crops = 2
-            self.register_buffer("center", torch.zeros(2, out_dim))
-        else:
-            self.register_buffer("center", torch.zeros(1, out_dim))
-        # we apply a warm up for the teacher temperature because
-        # a too high temperature makes the training instable at the beginning
-        self.teacher_temp_schedule = np.concatenate((
-            np.linspace(warmup_teacher_temp,
-                        teacher_temp, warmup_teacher_temp_epochs),
-            np.ones(nepochs - warmup_teacher_temp_epochs) * teacher_temp
-        ))
+        self.register_buffer("center", torch.zeros(1, out_dim))
+        # Just using the temp, not a schedule beacause no training
+        self.teacher_temp_schedule = teacher_temp
 
-    def forward(self, student_output, teacher_output, epoch):
+    # removed chunking and cumulative loss calculation
+    def forward(self, student_output, teacher_output):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """
         total_loss = 0
         n_loss_terms = 0
-        if self.two_token:
-            student_out = [x / self.student_temp for x in student_output]
-            student_out = [x.chunk(self.n_crops) for x in student_out]
-
-            # teacher centering and sharpening
-            temp = self.teacher_temp_schedule[epoch]
-            teacher_out = [F.softmax((x - self.center[idx]) / temp, dim=-1) for idx, x in enumerate(teacher_output)]
-            teacher_out = [x.detach().chunk(self.global_crops) for x in teacher_out]
-
-            for iv in range(len(student_out[0])):
-                if iv < 2:
-                    q = teacher_out[0][0]
-                    v = student_out[0][iv]
-                    loss = torch.sum(-q * F.log_softmax(v, dim=-1), dim=-1)
-                else:
-                    q = teacher_out[1][1]
-                    v = student_out[1][iv]
-                    loss = torch.sum(-q * F.log_softmax(v, dim=-1), dim=-1)
-                total_loss += loss.mean()
-                n_loss_terms += 1
-        else:
-            student_out = student_output / self.student_temp
-            student_out = student_out.chunk(self.n_crops)
-
-            # teacher centering and sharpening
-            temp = self.teacher_temp_schedule[epoch]
-            teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)
-            teacher_out = teacher_out.detach().chunk(self.global_crops)
-
-            for iq, q in enumerate(teacher_out):
-                for v in range(len(student_out)):
-                    if v == iq:
-                        # we skip cases where student and teacher operate on the same view
-                        continue
-                    loss = torch.sum(-q * F.log_softmax(student_out[v], dim=-1), dim=-1)
-                    total_loss += loss.mean()
-                    n_loss_terms += 1
+        
+        # Calculate the teacher and student losses for the entire tensors
+        q_teacher = F.softmax((teacher_output - self.center) / self.teacher_temp_schedule, dim=-1)
+        q_student = student_output / self.student_temp
+        total_loss += torch.sum(-q_teacher * F.log_softmax(q_student, dim=-1), dim=-1).mean()
+        n_loss_terms += 1
+        
         total_loss /= n_loss_terms
         self.update_center(teacher_output)
         return total_loss
 
+    # Do I even need to calculate the centering? Does it make a difference when not backpropagating?
     @torch.no_grad()
     def update_center(self, teacher_output):
         """
         Update center used for teacher output.
         """
         if isinstance(teacher_output, (tuple, list)):
-            batch_center = [torch.sum(x, dim=0, keepdim=True) for x in teacher_output]
-            dist.all_reduce(batch_center[0])
-            dist.all_reduce(batch_center[1])
-            batch_center = [x / (len(teacher_output[0]) * dist.get_world_size()) for x in batch_center]
-            self.center[0, :] = self.center[0, :] * self.center_momentum + batch_center[0] * (1 - self.center_momentum)
-            self.center[1, :] = self.center[1, :] * self.center_momentum + batch_center[1] * (1 - self.center_momentum)
+            # Update centers for each view (if applicable)
+            for i, teacher_view in enumerate(teacher_output):
+                batch_center = torch.sum(teacher_view, dim=0, keepdim=True)
+                dist.all_reduce(batch_center)
+                batch_center = batch_center / (len(teacher_view) * dist.get_world_size())
+                self.center[i, :] = self.center[i, :] * self.center_momentum + batch_center * (1 - self.center_momentum)
         else:
+            # Update center for the entire tensor
             batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
             dist.all_reduce(batch_center)
             batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
-
-            # ema update
             self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 
@@ -308,7 +338,6 @@ if __name__ == '__main__':
         Used for small local view cropping of multi-crop.""")
 
     args = parser.parse_args()
-    show_state_dict = False
-    show_loader = False
+    video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/__7xZtQ9fz0_000140_000150.mp4"
 
-    eval_dino(args, show_state_dict, show_loader)
+    eval_dino(args, video_path)
