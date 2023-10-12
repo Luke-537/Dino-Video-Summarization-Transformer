@@ -109,10 +109,18 @@ def eval_dino(args, video_path):
 
         loss = []
         for x in range(len(local_views)):
+            
+            save_tensor_as_video(local_views[x])
+            #save_tensor_as_video(global_views[x])
+
             print((x+1), "/", len(local_views))
 
             local_view = local_views[x].cuda(non_blocking=True)
             global_view = global_views[x].cuda(non_blocking=True)
+
+            #local_view = local_views[:(n*8)].cuda(non_blocking=True)
+            #global_view = global_views[:(n*8)].cuda(non_blocking=True)
+            #n=n+1
 
             with torch.no_grad():
                 student_output = student(local_view)
@@ -123,8 +131,7 @@ def eval_dino(args, video_path):
 
         export_loss(loss, file_name[0], 'loss_k400_resized_test/loss_output_3.json')
 
-        if i >= 2:
-            break
+        break
 
 
 def save_tensor_as_video(tensor):
@@ -153,6 +160,17 @@ def export_loss(loss_list, video_path, file_path):
     else:
         with open(file_path, 'w') as file:
             json.dump(video_dict, file)
+
+
+def create_correllation_matrix(loss_list):
+    correlation_matrix = np.zeros((len(loss_list), len(loss_list)))
+
+    for i in range(len(loss_list)):
+        for j in range(len(loss_list)):
+
+            correlation_matrix[i][j] = i + j
+
+    return correlation_matrix
 
 
 """

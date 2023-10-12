@@ -11,7 +11,7 @@ from torchvision.transforms import functional as tf
 import torch.nn.functional as F
 import kornia
 
-from datasets.transform import resize
+from datasets.transform import resize, uniform_crop, color_normalization
 from datasets.data_utils import get_random_sampling_rate, tensor_normalize, spatial_sampling, pack_pathway_output
 from datasets.decoder import decode
 from datasets.video_container import get_video_container
@@ -73,6 +73,13 @@ class KineticsCustom(torch.utils.data.Dataset):
     
     def __getitem__(self, index):
         frames = extract_frames_single_video(self._path_to_videos[index])
+
+        #augmentation = VideoDataAugmentationDINO()
+
+        # maybe permutations
+        #frames = uniform_crop(frames, 100, 1)
+        #frames = resize(frames, 150)
+        #frames = color_normalization(frames, mean=[0.485, 0.456, 0.406], stddev=[0.229, 0.224, 0.225])
             
         local_views, global_views = get_views_of_video_same_size(
             frames,
