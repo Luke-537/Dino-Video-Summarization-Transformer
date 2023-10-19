@@ -60,7 +60,7 @@ def eval_dino(args, video_path):
     teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
 
     local_clip_size = 3
-    global_clip_size = 61
+    global_clip_size = 60
     
     
     # load test dataset
@@ -105,22 +105,20 @@ def eval_dino(args, video_path):
     dino_loss = dino_loss.cuda()
 
     for i, (local_views, global_views, file_name) in enumerate(test_loader):
-        breakpoint()
+        #breakpoint()
 
         loss = []
         for x in range(len(local_views)):
             
-            save_tensor_as_video(local_views[x])
-            #save_tensor_as_video(global_views[x])
+            #save_tensor_as_video(global_views[x][0])
 
             print((x+1), "/", len(local_views))
 
             local_view = local_views[x].cuda(non_blocking=True)
             global_view = global_views[x].cuda(non_blocking=True)
 
-            #local_view = local_views[:(n*8)].cuda(non_blocking=True)
-            #global_view = global_views[:(n*8)].cuda(non_blocking=True)
-            #n=n+1
+            #local_view = local_views[n*4:(n+1)*4].cuda(non_blocking=True)
+            #global_view = global_views[n*4:(n+1)*4].cuda(non_blocking=True)
 
             with torch.no_grad():
                 student_output = student(local_view)
@@ -129,7 +127,7 @@ def eval_dino(args, video_path):
             for y in range(len(student_output)):
                 loss.append(dino_loss(student_output[y], teacher_output[y]).item())
 
-        export_loss(loss, file_name[0], 'loss_k400_resized_test/loss_output_3.json')
+        export_loss(loss, file_name[0], 'loss_k400_resized_test/loss_output_fintuned_3_60_test.json')
 
         break
 
@@ -137,7 +135,7 @@ def eval_dino(args, video_path):
 def save_tensor_as_video(tensor):
     tensor = tensor.permute(1, 2, 3, 0)
 
-    io.write_video('test_videos/video_test_1.mp4', tensor, fps=30)
+    io.write_video('test_videos/video_test_2.mp4', tensor, fps=30)
 
 
 def export_loss(loss_list, video_path, file_path):
@@ -149,7 +147,7 @@ def export_loss(loss_list, video_path, file_path):
     if os.path.exists(file_path):
         with open(file_path, 'r') as file:
             data = json.load(file)
-
+                    
         # Update data
         merged_dict = data.copy()
         merged_dict.update(video_dict)

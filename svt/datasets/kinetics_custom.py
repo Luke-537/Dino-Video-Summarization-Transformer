@@ -74,15 +74,18 @@ class KineticsCustom(torch.utils.data.Dataset):
     def __getitem__(self, index):
         frames = extract_frames_single_video(self._path_to_videos[index])
 
+        # Perform color normalization.
+        frames = color_normalization(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
+
         #augmentation = VideoDataAugmentationDINO()
 
-        # maybe permutations
-        #frames = uniform_crop(frames, 100, 1)
-        #frames = resize(frames, 150)
-        #frames = color_normalization(frames, mean=[0.485, 0.456, 0.406], stddev=[0.229, 0.224, 0.225])
+        cropped_frames, _ = uniform_crop(frames, size=150, spatial_idx=1) # adjust params
+   
+        #frames = resize(frames, 150) # do i still need this after cropping?
+        
             
         local_views, global_views = get_views_of_video_same_size(
-            frames,
+            cropped_frames,
             self.local_clip_size,
             self.global_clip_size,
         )
@@ -98,7 +101,7 @@ class KineticsCustom(torch.utils.data.Dataset):
 def extract_frames_single_video(video_path):
     video, audio, info = io.read_video(video_path, pts_unit='sec')
 
-    video = video.permute(3, 0, 1, 2)
+    video = video.permute(0, 3, 1, 2)
 
     tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
 
@@ -107,7 +110,7 @@ def extract_frames_single_video(video_path):
 
 def get_views_of_video_same_size(frames, local_size, global_size):
     #same as other function but views are the same size for batching
-    frames = frames.permute(1, 0, 2, 3)
+    #frames = frames.permute(1, 0, 2, 3)
 
     loc = int(local_size / 2)
     glob = int(global_size / 2)
@@ -140,7 +143,7 @@ def get_views_of_video_same_size(frames, local_size, global_size):
         tensor_local = frames[j:k].permute(1, 0, 2, 3)
         tensor_global = frames[l:m].permute(1, 0, 2, 3)
 
-        target = torch.zeros(3, global_size, 224, 224)       
+        target = torch.zeros(3, global_size, tensor_local.size(2), tensor_local.size(3))       
         target[:, :local_size, :] = tensor_local
 
         local_views.append(target)
