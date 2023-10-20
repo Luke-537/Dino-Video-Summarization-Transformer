@@ -46,6 +46,7 @@ def eval_dino(args, video_path):
     print("Model's state_dict:")
     for param_tensor in model.state_dict():
         print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+        
     """
 
     # Load teacher and student model class
@@ -77,19 +78,6 @@ def eval_dino(args, video_path):
         num_workers=args.num_workers,
         pin_memory=True,
     )
-
-    #breakpoint()
-
-    """
-    # load single video as test
-    tensor_test = extract_frames_single_video(video_path)
-
-    # get local and global views for each frame of the video
-    local_views, global_views = get_views_of_video(tensor_test, local_clip_size, global_clip_size)
-
-    # is stretched video right?
-    #save_tensor_as_video(tensor_test)
-    """
 
     # Instantiate dino loss
     dino_loss = DINOLoss(
@@ -169,61 +157,6 @@ def create_correllation_matrix(loss_list):
             correlation_matrix[i][j] = i + j
 
     return correlation_matrix
-
-
-"""
-def extract_frames_single_video(video_path):
-    video, audio, info = io.read_video(video_path, pts_unit='sec')
-
-    video = video.permute(3, 0, 1, 2)
-
-    tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
-
-    return tensor_resized.to(torch.float)
-
-
-def get_views_first_frame(frames):
-    local_view = frames.permute(1, 0, 2, 3)
-    local_view = local_view[:3].permute(1, 0, 2, 3)
-
-    global_view = frames.permute(1, 0, 2, 3)
-    global_view = global_view[:30].permute(1, 0, 2, 3)
-
-    return local_view, global_view
-
-
-def get_views_of_video(frames, local_size, global_size):
-    frames = frames.permute(1, 0, 2, 3)
-
-    loc = int(local_size / 2)
-    glob = int(global_size / 2)
-
-    local_views = []
-    global_views = []
-
-    for i in range(len(frames)):
-        j = i-loc
-        k = i+loc+1
-        l = i-glob
-        m = i+glob+1
-
-        if j < 0:
-            j = 0
-
-        if k >= len(frames):
-            k = len(frames)
-
-        if l < 0:
-            l = 0
-
-        if m >= len(frames):
-            m = len(frames)
-
-        local_views.append(frames[j:k].permute(1, 0, 2, 3))
-        global_views.append(frames[l:m].permute(1, 0, 2, 3))
-
-    return local_views, global_views
-"""
 
 
 # DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 

@@ -186,4 +186,26 @@ def get_views_of_video(frames, local_size, global_size):
 
     return local_views, global_views
 
+
+
+# load single video as test
+tensor_test = extract_frames_single_video(video_path)
+
+# get local and global views for each frame of the video
+local_views, global_views = get_views_of_video(tensor_test, local_clip_size, global_clip_size)
+
+# is stretched video right?
+#save_tensor_as_video(tensor_test)
+
+    
+def get_views_first_frame(frames):
+    local_view = frames.permute(1, 0, 2, 3)
+    local_view = local_view[:3].permute(1, 0, 2, 3)
+
+    global_view = frames.permute(1, 0, 2, 3)
+    global_view = global_view[:30].permute(1, 0, 2, 3)
+
+    return local_view, global_view
+    
+
 """
