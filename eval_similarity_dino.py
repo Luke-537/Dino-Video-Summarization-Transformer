@@ -105,30 +105,24 @@ def eval_dino(args, video_path):
     )
     dino_loss = dino_loss.cuda()
 
-    for i, (local_views, global_views, file_name) in enumerate(test_loader):
-        #breakpoint()
+    for i, (views_list, file_name) in enumerate(test_loader):
+        breakpoint()
 
         loss = []
-        for x in range(len(local_views)):
+        for x in range(len(views_list)):
             
             #save_tensor_as_video(global_views[x][0])
 
-            print((x+1), "/", len(local_views))
-
-            local_view = local_views[x].cuda(non_blocking=True)
-            global_view = global_views[x].cuda(non_blocking=True)
-
-            #local_view = local_views[n*4:(n+1)*4].cuda(non_blocking=True)
-            #global_view = global_views[n*4:(n+1)*4].cuda(non_blocking=True)
+            print((x+1), "/", len(views_list))
 
             with torch.no_grad():
-                student_output = student(local_view)
-                teacher_output = teacher(global_view)
+                student_output = student(views_list[x][::2].cuda(non_blocking=True))
+                teacher_output = teacher(views_list[x][1::2].cuda(non_blocking=True))
 
             for y in range(len(student_output)):
                 loss.append(dino_loss(student_output[y], teacher_output[y]).item())
 
-        #export_loss(loss, file_name[0], 'loss_k400_resized_test/loss_output_fintuned_3_60_test.json')
+        #export_loss(loss, file_name[0])
 
         break
 
@@ -139,7 +133,8 @@ def save_tensor_as_video(tensor):
     io.write_video('test_videos/video_test_2.mp4', tensor, fps=30)
 
 
-def export_loss(loss_list, video_path, file_path):
+def export_loss(loss_list, video_path):
+    file_path = 'loss_k400_resized_test/loss_output_test.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

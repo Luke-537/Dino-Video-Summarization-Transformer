@@ -2,7 +2,7 @@
 
 PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
 DATA_PATH="/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
-EXP_NAME="kinetics400_vitb_ssl_finetuned_3_60"
+EXP_NAME="kinetics400_vitb_ssl_finetuned_3x1_224_student"
 
 cd "$PROJECT_PATH" || exit
 
@@ -22,7 +22,6 @@ python -m torch.distributed.launch \
   --output_dir "checkpoints/$EXP_NAME" \
   --epochs 1 \
   --warmup_epochs 0 \
-  --local_crops_number 3 \
   --opts \
   MODEL.TWO_STREAM False \
   MODEL.TWO_TOKEN False \

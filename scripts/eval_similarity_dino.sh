@@ -4,7 +4,7 @@ PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
 EXP_NAME="le_001"
 DATASET="kinetics400"
 DATA_PATH="/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
-CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_3_60/checkpoint.pth"
+CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
 
 cd "$PROJECT_PATH" || exit
 
@@ -12,7 +12,7 @@ if [ ! -d "checkpoints/$EXP_NAME" ]; then
   mkdir "checkpoints/$EXP_NAME"
 fi
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
@@ -21,7 +21,7 @@ python -m torch.distributed.launch \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 20 \
   --lr 0.001 \
-  --batch_size_per_gpu 1 \
+  --batch_size_per_gpu 8 \
   --num_workers 4 \
   --num_labels 400 \
   --dataset "$DATASET" \

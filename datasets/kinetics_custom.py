@@ -33,6 +33,10 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
+        self.dummy_list = []
+        for i in range(self.global_clip_size*2):
+            self.dummy_list.append(torch.zeros(3, 60, 150, 150))
+
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
         )
@@ -75,28 +79,38 @@ class KineticsCustom(torch.utils.data.Dataset):
     def __getitem__(self, index):
         frames = extract_frames_single_video(self._path_to_videos[index])
 
-        # Perform color normalization.
+        # Perform normalization. NO COLOR
         frames = color_normalization(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
-
-        #augmentation = VideoDataAugmentationDINO()
-
-        cropped_frames, _ = uniform_crop(frames, size=150, spatial_idx=1) # adjust params
-   
-        #frames = resize(frames, 150) # do i still need this after cropping?
-        
+        frames, _ = uniform_crop(frames, size=150, spatial_idx=1) # adjust params   
             
-        local_views, global_views = get_views_of_video_same_size(
-            cropped_frames,
+        views_list = get_views_of_video_same_size(
+            frames,
             self.local_clip_size,
             self.global_clip_size,
-        )
+        ) 
 
-        return local_views, global_views, self._path_to_videos[index]
+        if size_mismatch(views_list):
+
+            return self.dummy_list, self._path_to_videos[index]
+        else:
+
+            return views_list, self._path_to_videos[index]
 
 
     def __len__(self):
 
         return len(self._path_to_videos)
+    
+
+def size_mismatch(list):
+    first_tensor_size = list[0].shape
+    same_size = True
+
+    for tensor in list[1:]:
+        if tensor.shape != first_tensor_size:
+            same_size = False
+    
+    return same_size
 
 
 def extract_frames_single_video(video_path):
@@ -111,19 +125,16 @@ def extract_frames_single_video(video_path):
 
 def get_views_of_video_same_size(frames, local_size, global_size):
     #same as other function but views are the same size for batching
-    #frames = frames.permute(1, 0, 2, 3)
-
     loc = int(local_size / 2)
     glob = int(global_size / 2)
 
-    local_views = []
-    global_views = []
+    views_list = []
 
     for i in range(len(frames)):
         j = i-loc
         k = i+loc+1
         l = i-glob
-        m = i+glob+1
+        m = i+glob
 
         if j < 0:
             j = 0
@@ -144,13 +155,13 @@ def get_views_of_video_same_size(frames, local_size, global_size):
         tensor_local = frames[j:k].permute(1, 0, 2, 3)
         tensor_global = frames[l:m].permute(1, 0, 2, 3)
 
-        target = torch.zeros(3, global_size, tensor_local.size(2), tensor_local.size(3))       
-        target[:, :local_size, :] = tensor_local
+        tensor_padded = torch.zeros(3, global_size, tensor_local.size(2), tensor_local.size(3))       
+        tensor_padded[:, :local_size, :] = tensor_local
 
-        local_views.append(target)
-        global_views.append(tensor_global)
+        views_list.append(tensor_padded)
+        views_list.append(tensor_global)
 
-    return local_views, global_views
+    return views_list
 
 
 """

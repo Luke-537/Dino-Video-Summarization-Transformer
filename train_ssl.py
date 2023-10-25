@@ -353,12 +353,12 @@ def train_svt(args):
     # ============ preparing loss ... ============
     dino_loss = DINOLoss(
         args.out_dim,
-        args.local_crops_number + 60,  # total number of crops = 2 global crops + local_crops_number
+        args.local_crops_number + 2,  # total number of crops = 2 global crops + local_crops_number
         args.warmup_teacher_temp,
         args.teacher_temp,
         args.warmup_teacher_temp_epochs,
         args.epochs,
-        global_crops=60,
+        global_crops=2,
         two_token=config.MODEL.TWO_TOKEN
     ).cuda()
 
@@ -409,7 +409,7 @@ def train_svt(args):
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
     utils.restart_from_checkpoint(
-        os.path.join(args.output_dir, "model_k400_pretrained/kinetics400_vitb_ssl.pth"),
+        os.path.join(args.output_dir, "checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"),
         run_variables=to_restore,
         student=student,
         teacher=teacher,
