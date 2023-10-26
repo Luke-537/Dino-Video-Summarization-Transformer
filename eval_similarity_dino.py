@@ -87,9 +87,10 @@ def eval_dino(args, video_path):
 
     test_loader = torch.utils.data.DataLoader(
         dataset_test,
-        batch_size=args.batch_size_per_gpu,
-        num_workers=args.num_workers,
-        pin_memory=True,
+        #batch_size=args.batch_size_per_gpu,
+        #num_workers=args.num_workers,
+        #pin_memory=True,
+        collate_fn=collate_fn_custom,
     )
 
     # Instantiate dino loss
@@ -101,7 +102,7 @@ def eval_dino(args, video_path):
         args.warmup_teacher_temp_epochs,
         args.epochs,
         global_crops=1,
-        two_token=config.MODEL.TWO_TOKEN
+        #two_token=config.MODEL.TWO_TOKEN
     )
     dino_loss = dino_loss.cuda()
 
@@ -111,30 +112,33 @@ def eval_dino(args, video_path):
         loss = []
         for x in range(len(views_list)):
             
-            #save_tensor_as_video(global_views[x][0])
+            #save_tensor_as_video(views_list[x][1])
 
             print((x+1), "/", len(views_list))
 
+            local_views = views_list[x][::2].cuda(non_blocking=True)
+            global_views = views_list[x][1::2].cuda(non_blocking=True)
+
             with torch.no_grad():
-                student_output = student(views_list[x][::2].cuda(non_blocking=True))
-                teacher_output = teacher(views_list[x][1::2].cuda(non_blocking=True))
+                student_output = student(local_views)
+                teacher_output = teacher(global_views)
 
             for y in range(len(student_output)):
                 loss.append(dino_loss(student_output[y], teacher_output[y]).item())
 
-        #export_loss(loss, file_name[0])
-
+        export_loss(loss, file_name[0])
+        
         break
 
 
 def save_tensor_as_video(tensor):
     tensor = tensor.permute(1, 2, 3, 0)
 
-    io.write_video('test_videos/video_test_2.mp4', tensor, fps=30)
+    io.write_video('test_videos/video_test_3.mp4', tensor, fps=30)
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_k400_resized_test/loss_output_test.json' 
+    file_path = 'loss_k400_resized_test/loss_output_test_1.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
@@ -165,6 +169,21 @@ def create_correllation_matrix(loss_list):
             correlation_matrix[i][j] = i + j
 
     return correlation_matrix
+
+
+def collate_fn_custom(batch):
+    # Unzip the batch to separate the lists of tensors and the list of labels
+    list_of_tensors, labels = zip(*batch)
+
+    batched_list = []
+
+    i = 0
+    while i < len(list_of_tensors[0]):
+        j = i + args.batch_size_per_gpu
+        batched_list.append(torch.stack(list_of_tensors[0][i:j]))
+        i = j
+
+    return batched_list, labels
 
 
 # DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 

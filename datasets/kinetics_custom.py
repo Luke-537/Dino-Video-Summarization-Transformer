@@ -33,9 +33,11 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
+        self.center_crop_size = 100
+
         self.dummy_list = []
         for i in range(self.global_clip_size*2):
-            self.dummy_list.append(torch.zeros(3, 60, 150, 150))
+            self.dummy_list.append(torch.zeros(3, 60, self.center_crop_size, self.center_crop_size))
 
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
@@ -79,9 +81,11 @@ class KineticsCustom(torch.utils.data.Dataset):
     def __getitem__(self, index):
         frames = extract_frames_single_video(self._path_to_videos[index])
 
-        # Perform normalization. NO COLOR
-        frames = color_normalization(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
-        frames, _ = uniform_crop(frames, size=150, spatial_idx=1) # adjust params   
+        frames, _ = uniform_crop(frames, size=self.center_crop_size, spatial_idx=1) # adjust params
+        
+        # Perform normalization. NO COLOR?
+        #frames = frames.float() / 255.0
+        #frames = color_normalization(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
             
         views_list = get_views_of_video_same_size(
             frames,
@@ -89,12 +93,12 @@ class KineticsCustom(torch.utils.data.Dataset):
             self.global_clip_size,
         ) 
 
-        if size_mismatch(views_list):
-
-            return self.dummy_list, self._path_to_videos[index]
-        else:
+        if size_match(views_list):
 
             return views_list, self._path_to_videos[index]
+        else:
+
+            return self.dummy_list, self._path_to_videos[index]
 
 
     def __len__(self):
@@ -102,12 +106,11 @@ class KineticsCustom(torch.utils.data.Dataset):
         return len(self._path_to_videos)
     
 
-def size_mismatch(list):
-    first_tensor_size = list[0].shape
+def size_match(list):
     same_size = True
 
     for tensor in list[1:]:
-        if tensor.shape != first_tensor_size:
+        if tensor.shape != list[0].shape:
             same_size = False
     
     return same_size
