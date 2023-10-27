@@ -4,6 +4,9 @@
 checkpoints
 check_for_head.py
 /data
+test_videos
+plots
+loss_k400_resized_test
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
