@@ -134,11 +134,11 @@ def eval_dino(args, video_path):
 def save_tensor_as_video(tensor):
     tensor = tensor.permute(1, 2, 3, 0)
 
-    io.write_video('test_videos/video_test_msvd.mp4', tensor, fps=30)
+    io.write_video('videos_test/video_test_msvd.mp4', tensor, fps=30)
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_k400_resized_test/loss_output_test_msvd.json' 
+    file_path = 'loss_files_test/loss_output_test_msvd.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

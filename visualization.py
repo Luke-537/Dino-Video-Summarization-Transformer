@@ -20,7 +20,7 @@ def plot_loss(file_path):
     plt.grid(False)
 
     # Save the plot
-    plt.savefig("plots/test1.png")
+    plt.savefig("plots_test/test1.png")
 
 
 if __name__ == '__main__':
