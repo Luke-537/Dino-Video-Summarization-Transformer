@@ -33,7 +33,8 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
-        self.center_crop_size = 100
+        self.center_crop_size = 224
+        self.sampling_rate = 8
 
         self.dummy_list = []
         for i in range(self.global_clip_size*2):
@@ -79,13 +80,26 @@ class KineticsCustom(torch.utils.data.Dataset):
 
     
     def __getitem__(self, index):
-        frames = extract_frames_single_video(self._path_to_videos[index])
+        video, audio, info = io.read_video(self._path_to_videos[index], pts_unit='sec')
+        frames = video.to(torch.float)
 
+        #breakpoint()
+
+        # only sample every n-th frame
+        frames = frames[::self.sampling_rate]
+
+        frames = tensor_normalize(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
+
+        # resize or no? check kinetics script!!!!!!!!
+        # T H W C -> T C H W.
+        #video = video.permute(0, 3, 1, 2)
+        #tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
+        # T C H W -> T H W C.
+        #frames = frames.permute(0, 2, 3, 1)
+
+        # T H W C -> T C H W.
+        frames = frames.permute(0, 3, 1, 2)
         frames, _ = uniform_crop(frames, size=self.center_crop_size, spatial_idx=1) # adjust params
-        
-        # Perform normalization. NO COLOR?
-        #frames = frames.float() / 255.0
-        #frames = color_normalization(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
             
         views_list = get_views_of_video_same_size(
             frames,
@@ -116,22 +130,15 @@ def size_match(list):
     return same_size
 
 
-def extract_frames_single_video(video_path):
-    video, audio, info = io.read_video(video_path, pts_unit='sec')
-
-    video = video.permute(0, 3, 1, 2)
-
-    tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
-
-    return tensor_resized.to(torch.float)
-
-
 def get_views_of_video_same_size(frames, local_size, global_size):
     #same as other function but views are the same size for batching
     loc = int(local_size / 2)
     glob = int(global_size / 2)
 
     views_list = []
+
+    if len(frames) < global_size:
+        global_size = len(frames)
 
     for i in range(len(frames)):
         j = i-loc
@@ -155,6 +162,7 @@ def get_views_of_video_same_size(frames, local_size, global_size):
             m = len(frames)
             l = len(frames)-global_size
 
+        # T C H W -> C T H W.
         tensor_local = frames[j:k].permute(1, 0, 2, 3)
         tensor_global = frames[l:m].permute(1, 0, 2, 3)
 
