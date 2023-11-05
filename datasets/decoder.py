@@ -438,3 +438,146 @@ def decode(
     else:
         frames = temporal_sampling(frames, start_idx, end_idx, num_frames)  # frames.shape = (T, H, W, C)
     return frames
+
+
+def decode_custom(
+    container,
+    sampling_rate,
+    num_frames,
+    clip_idx=-1,
+    num_clips=10,
+    video_meta=None,
+    target_fps=30,
+    backend="pyav",
+    max_spatial_scale=0,
+    start=None,
+    end=None,
+    duration=None,
+    frames_length=None,
+    temporal_aug=False,
+    two_token=False,
+    rand_fr=False
+):
+    """
+    Decode the video and perform temporal sampling.
+    Args:
+        container (container): pyav container.
+        sampling_rate (int): frame sampling rate (interval between two sampled
+            frames).
+        num_frames (int): number of frames to sample.
+        clip_idx (int): if clip_idx is -1, perform random temporal
+            sampling. If clip_idx is larger than -1, uniformly split the
+            video to num_clips clips, and select the
+            clip_idx-th video clip.
+        num_clips (int): overall number of clips to uniformly
+            sample from the given video.
+        video_meta (dict): a dict contains VideoMetaData. Details can be find
+            at `pytorch/vision/torchvision/io/_video_opt.py`.
+        target_fps (int): the input video may have different fps, convert it to
+            the target video fps before frame sampling.
+        backend (str): decoding backend includes `pyav` and `torchvision`. The
+            default one is `pyav`.
+        max_spatial_scale (int): keep the aspect ratio and resize the frame so
+            that shorter edge size is max_spatial_scale. Only used in
+            `torchvision` backend.
+        temporal_aug: bool
+        two_token: bool
+        rand_fr: bool
+    Returns:
+        frames (tensor): decoded frames from the video.
+    """
+    #breakpoint()
+    # Currently support two decoders: 1) PyAV, and 2) TorchVision.
+    assert clip_idx >= -1, "Not valied clip_idx {}".format(clip_idx)
+    try:
+        if backend == "pyav":
+            frames, fps, decode_all_video = pyav_decode(
+                container,
+                sampling_rate,
+                num_frames,
+                clip_idx,
+                num_clips,
+                target_fps,
+                start,
+                end,
+                duration,
+                frames_length,
+            )
+        elif backend == "torchvision":
+            frames, fps, decode_all_video = torchvision_decode(
+                container,
+                sampling_rate,
+                num_frames,
+                clip_idx,
+                video_meta,
+                num_clips,
+                target_fps,
+                ("visual",),
+                max_spatial_scale,
+            )
+        else:
+            raise NotImplementedError(
+                "Unknown decoding backend {}".format(backend)
+            )
+    except Exception as e:
+        print("Failed to decode by {} with exception: {}".format(backend, e))
+        return None
+
+    # Return None if the frames was not decoded successfully.
+    if frames is None or frames.size(0) == 0:
+        return None
+
+    clip_sz = sampling_rate * num_frames / target_fps * fps
+    start_idx, end_idx = get_start_end_idx(
+        video_size=frames.shape[0],
+        clip_size=clip_sz,
+        clip_idx=clip_idx if decode_all_video else 0,
+        num_clips=num_clips if decode_all_video else 1,
+    )
+    # Perform temporal sampling from the decoded video.
+    if two_token:
+        max_len = frames.shape[0]
+        global_samples = []
+        for _ in range(3):
+            random_idx = random.randint(0, 6)
+            cur_global = temporal_sampling(frames, random_idx, max_len - random_idx, num_frames)
+            global_samples.append(cur_global)
+        local_samples = []
+        local_width = max_len // 8
+        for _ in range(2):
+            random_idx = random.randint(0, max_len - local_width - 1)
+            cur_local = temporal_sampling(frames, random_idx, random_idx + local_width, num_frames)
+            local_samples.append(cur_local)
+        frames = [*global_samples, *local_samples]
+    elif temporal_aug:
+        #breakpoint()
+        # Is only called in train mode!!!!!!!!! this is the relevant part
+        max_len = frames.shape[0]
+
+        if rand_fr:
+            global_1 = temporal_sampling(frames, 0, max_len - 5, 4)
+            global_2 = temporal_sampling(frames, 5, max_len, 8)
+            local_samples = []
+            local_width = max_len // 8
+            num_local_frames = [2, 2, 4, 4, 8, 8, 16, 16]
+            for l_idx in range(8):
+                random_idx = random.randint(0, max_len - local_width - 1)
+                cur_local = temporal_sampling(frames, random_idx, random_idx + local_width, num_local_frames[l_idx])
+                local_samples.append(cur_local)
+        else:
+            num_global_frames = 60
+            num_local_frames = 3
+            global_1 = temporal_sampling(frames, 0, max_len - 10, num_global_frames)
+            global_2 = temporal_sampling(frames, 10, max_len, num_global_frames)
+            local_samples = []
+            local_width = max_len // 24
+            for _ in range(8):
+                random_idx = random.randint(0, max_len - local_width - 1)
+                cur_local = temporal_sampling(frames, random_idx, random_idx + local_width, num_local_frames)
+                local_samples.append(cur_local)
+
+        frames = [global_1, global_2, *local_samples]
+
+    else:
+        frames = temporal_sampling(frames, start_idx, end_idx, num_frames)  # frames.shape = (T, H, W, C)
+    return frames

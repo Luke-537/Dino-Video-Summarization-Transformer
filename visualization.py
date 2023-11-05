@@ -1,42 +1,60 @@
 import matplotlib.pyplot as plt
 import json
 import numpy as np
-from loss_utils import create_correllation_matrix
+import torchvision.io as io
 
-def plot_loss(file_path):
-    # Load precomputed loss values (replace this with your actual data)
-    with open(file_path, 'r') as file:
-        loss_values = json.load(file)
 
-    loss_values = loss_values["-4wsuPCjDBc_5_15"]
+def plot_loss(loss_file_path, sampling_rate, key=None):
+    # Load precomputed loss values
+    with open(loss_file_path, 'r') as file:
+        loss_dict = json.load(file)
+
+    if key == None:
+        _, loss_values = list(loss_dict.items())[0]
+    
+    else:
+        loss_values = loss_dict[key]
+
+    # loss_values = create_correlation_matrix(loss_values)
 
     frame_numbers = np.arange(len(loss_values))
 
-    # Create a figure and a set of subplots. This utility wrapper makes it convenient to create common layouts of subplots.
-    # Adjusting the figsize parameter will give you a wider plot.
-    # For instance, here it's set to 12 inches wide and 6 inches tall.
-    fig, ax = plt.subplots(figsize=(20, 6))
+    # Create a figure and a set of subplots
+    # Fihure size set to 12 inches wide and 6 inches tall
+    fig, ax = plt.subplots(figsize=(15, 6))
 
-    # Create a bar chart. The ax.bar function is preferable over plt.bar when dealing with subplots.
-    ax.bar(frame_numbers, loss_values, label='Loss', color='blue')
+    # Create a bar chart
+    ax.bar(frame_numbers*sampling_rate, loss_values, label='Loss', color='blue', width=2.5)
 
     # Set labels and title
     ax.set_xlabel('Frame Number')
     ax.set_ylabel('Loss Value')
     ax.set_title('Loss Over Frames')
     ax.legend()
-
-    # You can choose whether to display the grid.
     ax.grid(False)
 
     # Save the plot with higher resolution (dpi).
-    # You can increase the dpi value further if you need more detail.
-    plt.savefig("plots_test/test_msvd_5.png", dpi=300)
+    plt.savefig("plots_test/test_msvd_finetuned_6.png", dpi=300)
 
-    # It's good practice to close the figure with plt.close() to free up memory, especially if running in a loop.
+    # free up memory
     plt.close()
 
+
+def create_correlation_matrix(loss_list):
+    correlation = np.corrcoef(loss_list, loss_list)
+    normalized_correlation = correlation / correlation[len(loss_list) - 1]
+
+    return normalized_correlation
+
+
+def save_tensor_as_video(tensor):
+    tensor = tensor.permute(1, 2, 3, 0)
+
+    io.write_video('videos_test/video_2.mp4', tensor, fps=4)
+
+
 if __name__ == '__main__':
-    file_path = "loss_files_test/loss_output_test_msvd_4.json"
-    plot_loss(file_path)
+    sampling_rate = 4
+    loss_file_path = "loss_files_test/loss_output_test_msvd_finetuned_6.json"
+    plot_loss(loss_file_path, sampling_rate)
     

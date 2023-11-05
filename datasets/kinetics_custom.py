@@ -21,24 +21,24 @@ from einops import rearrange
 
 class KineticsCustom(torch.utils.data.Dataset):
 
-    def __init__(self, cfg, mode, local_clip_size, global_clip_size):
+    def __init__(self, cfg, mode, local_clip_size, global_clip_size, sampling_rate):
         self.cfg = cfg
         self.mode = mode
 
         self.local_clip_size = local_clip_size
         self.global_clip_size = global_clip_size
+        self.sampling_rate = sampling_rate
 
         self._video_meta = {}
         self._num_retries = 10
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
-        self.center_crop_size = 224
-        self.sampling_rate = 8
+        self.crop_size = 224
 
         self.dummy_list = []
         for i in range(self.global_clip_size*2):
-            self.dummy_list.append(torch.zeros(3, 60, self.center_crop_size, self.center_crop_size))
+            self.dummy_list.append(torch.zeros(3, 60, self.crop_size, self.crop_size))
 
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
@@ -90,7 +90,26 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         frames = tensor_normalize(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
 
-        # resize or no? check kinetics script!!!!!!!!
+        """
+        # T H W C -> C T H W.
+        frames = frames.permute(3, 0, 1, 2)
+
+        # Perform data augmentation.
+        frames = spatial_sampling(
+            frames,
+            spatial_idx=-1,  # -1 for center crop
+            min_scale=self.crop_size,
+            max_scale=self.crop_size,
+            crop_size=self.crop_size,
+            random_horizontal_flip=False,
+            inverse_uniform_sampling=False,
+        )
+
+        # C T H W -> T C H W
+        frames = frames.permute(1, 0, 2, 3)
+        """
+
+        # resize or no? check kinetics script
         # T H W C -> T C H W.
         #video = video.permute(0, 3, 1, 2)
         #tensor_resized = torch.stack([tf.resize(frame, [224, 224]) for frame in video])
@@ -99,8 +118,8 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         # T H W C -> T C H W.
         frames = frames.permute(0, 3, 1, 2)
-        frames, _ = uniform_crop(frames, size=self.center_crop_size, spatial_idx=1) # adjust params
-            
+        frames, _ = uniform_crop(frames, size=self.crop_size, spatial_idx=1) # adjust params
+
         views_list = get_views_of_video_same_size(
             frames,
             self.local_clip_size,

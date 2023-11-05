@@ -4,7 +4,7 @@ PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
 EXP_NAME="le_001"
 DATASET="kinetics400"
 DATA_PATH="/graphics/scratch/datasets/MSVD/YouTubeClips"
-CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
+CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_60x16_224/checkpoint.pth"
 
 cd "$PROJECT_PATH" || exit
 

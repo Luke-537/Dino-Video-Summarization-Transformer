@@ -33,6 +33,7 @@ from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3
 from utils import utils
 from utils.meters import TestMeter
 from utils.parser import load_config
+from visualization import save_tensor_as_video
 
 
 def eval_dino(args, video_path):
@@ -62,6 +63,10 @@ def eval_dino(args, video_path):
 
     """
 
+    print(ckpt.keys())
+
+    breakpoint()
+
     # Load teacher and student model class
     student = get_vit_base_patch16_224(cfg=config, no_head=False)
     teacher = get_vit_base_patch16_224(cfg=config, no_head=False)
@@ -70,11 +75,13 @@ def eval_dino(args, video_path):
 
     student, teacher = student.cuda(), teacher.cuda()
 
-    student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu], find_unused_parameters=False)
-    teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
+    # remove?
+    #student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu], find_unused_parameters=False)
+    #teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
 
     local_clip_size = 3
     global_clip_size = 60
+    sampling_rate = 4
     
     
     # load test dataset
@@ -82,7 +89,8 @@ def eval_dino(args, video_path):
         cfg=config,
         mode="test",
         local_clip_size=local_clip_size, 
-        global_clip_size=global_clip_size
+        global_clip_size=global_clip_size,
+        sampling_rate=sampling_rate
     )
 
     test_loader = torch.utils.data.DataLoader(
@@ -102,9 +110,7 @@ def eval_dino(args, video_path):
         args.warmup_teacher_temp_epochs,
         args.epochs,
         global_crops=1,
-        #two_token=config.MODEL.TWO_TOKEN
-    )
-    dino_loss = dino_loss.cuda()
+    ).cuda()
 
     for i, (views_list, file_name) in enumerate(test_loader):
         breakpoint()
@@ -120,25 +126,19 @@ def eval_dino(args, video_path):
             global_views = views_list[x][1::2].cuda(non_blocking=True)
 
             with torch.no_grad():
-                student_output = student(local_views)
+                student_output = student(torch.unsqueeze(local_views[0],0))
                 teacher_output = teacher(global_views)
 
             for y in range(len(student_output)):
-                loss.append(dino_loss(student_output[y], teacher_output[y]).item())
+                loss.append(dino_loss.forward(student_output[y], teacher_output[y]).item())
 
         export_loss(loss, file_name[0])
         
         break
 
 
-def save_tensor_as_video(tensor):
-    tensor = tensor.permute(1, 2, 3, 0)
-
-    io.write_video('videos_test/video_test_msvd_3.mp4', tensor, fps=30)
-
-
 def export_loss(loss_list, video_path):
-    file_path = 'loss_files_test/loss_output_test_msvd_4.json' 
+    file_path = 'loss_files_test/loss_output_test_msvd_finetuned_6.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
@@ -187,7 +187,6 @@ class DINOLoss(nn.Module):
         self.center_momentum = center_momentum
         self.n_crops = ncrops
         self.global_crops = global_crops
-        self.two_token = two_token
         self.register_buffer("center", torch.zeros(1, out_dim))
         # Just using the temp, not a schedule beacause no training
         self.teacher_temp_schedule = teacher_temp
@@ -207,28 +206,7 @@ class DINOLoss(nn.Module):
         n_loss_terms += 1
         
         total_loss /= n_loss_terms
-        self.update_center(teacher_output)
         return total_loss
-
-    # Do I even need to calculate the centering? Does it make a difference when not backpropagating?
-    @torch.no_grad()
-    def update_center(self, teacher_output):
-        """
-        Update center used for teacher output.
-        """
-        if isinstance(teacher_output, (tuple, list)):
-            # Update centers for each view (if applicable)
-            for i, teacher_view in enumerate(teacher_output):
-                batch_center = torch.sum(teacher_view, dim=0, keepdim=True)
-                dist.all_reduce(batch_center)
-                batch_center = batch_center / (len(teacher_view) * dist.get_world_size())
-                self.center[i, :] = self.center[i, :] * self.center_momentum + batch_center * (1 - self.center_momentum)
-        else:
-            # Update center for the entire tensor
-            batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
-            dist.all_reduce(batch_center)
-            batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
-            self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 
 if __name__ == '__main__':
@@ -264,7 +242,7 @@ if __name__ == '__main__':
 
     # config file
     parser.add_argument("--cfg", dest="cfg_file", help="Path to the config file", type=str,
-                        default="models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml")
+                        default="models/configs/Kinetics/TimeSformer_divST_60x16_224.yaml")
     parser.add_argument("--opts", help="See utils/defaults.py for all options", default=None, nargs=argparse.REMAINDER)
 
     # Model parameters

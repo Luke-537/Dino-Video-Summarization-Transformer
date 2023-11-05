@@ -7,14 +7,16 @@ from PIL import Image
 import torch
 import torch.utils.data
 import torchvision
+import torchvision.io as io
 import kornia
 
 from datasets.transform import resize
 from datasets.data_utils import get_random_sampling_rate, tensor_normalize, spatial_sampling, pack_pathway_output
-from datasets.decoder import decode
+from datasets.decoder import decode, decode_custom
 from datasets.video_container import get_video_container
 from datasets.transform import VideoDataAugmentationDINO
 from einops import rearrange
+from visualization import save_tensor_as_video
 
 
 class Kinetics(torch.utils.data.Dataset):
@@ -131,9 +133,6 @@ class Kinetics(torch.utils.data.Dataset):
                 decoded, then return the index of the video. If not, return the
                 index of the video replacement that can be decoded.
         """
-
-        breakpoint()
-
         short_cycle_idx = None
         # When short cycle is used, input index is a tupple.
         if isinstance(index, tuple):
@@ -225,7 +224,8 @@ class Kinetics(torch.utils.data.Dataset):
                 continue
 
             # Decode video. Meta info is used to perform selective decoding.
-            frames = decode(
+            # previously decode()
+            frames = decode_custom(
                 container=video_container,
                 sampling_rate=sampling_rate,
                 num_frames=self.cfg.DATA.NUM_FRAMES,
@@ -256,13 +256,6 @@ class Kinetics(torch.utils.data.Dataset):
             label = self._labels[index]
 
             if self.mode in ["test", "val"] or self.cfg.DATA.NO_RGB_AUG:
-
-                """
-                #breakpoint()
-                frames = frames.permute(3, 0, 1, 2)
-                #save_tensor_as_video(frames)
-                frames = frames.permute(1, 2, 3, 0)
-                """
                 # Perform color normalization.
                 frames = tensor_normalize(
                     frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD
@@ -284,6 +277,9 @@ class Kinetics(torch.utils.data.Dataset):
 
                 if not self.cfg.MODEL.ARCH in ['vit']:
                     frames = pack_pathway_output(self.cfg, frames)
+
+                # removed temporal sampling
+                """
                 else:
                     # Perform temporal sampling from the fast pathway.
                     frames = torch.index_select(
@@ -294,6 +290,7 @@ class Kinetics(torch.utils.data.Dataset):
 
                         ).long(),
                     )
+                """
 
             else:
                 # T H W C -> T C H W.
@@ -307,6 +304,8 @@ class Kinetics(torch.utils.data.Dataset):
                 # T C H W -> C T H W.
                 frames = [rearrange(x, "t c h w -> c t h w") for x in frames]
 
+                #removed temporal sampling
+                """
                 # Perform temporal sampling from the fast pathway.
                 frames = [torch.index_select(
                     x,
@@ -316,6 +315,7 @@ class Kinetics(torch.utils.data.Dataset):
 
                     ).long(),
                 ) for x in frames]
+                """
 
             meta_data = {}
             if self.get_flow:
@@ -358,13 +358,6 @@ class Kinetics(torch.utils.data.Dataset):
         flow_image_list = [Image.open(im_path) for im_path in flow_image_list]
         flow_image_list = [torchvision.transforms.functional.to_tensor(im_path) for im_path in flow_image_list]
         return torch.stack(flow_image_list, dim=0)
-
-import torchvision.io as io
-
-def save_tensor_as_video(tensor):
-    tensor = tensor.permute(1, 2, 3, 0)
-
-    io.write_video('videos_test/video_test_kinetics.mp4', tensor, fps=4)
 
 
 if __name__ == '__main__':

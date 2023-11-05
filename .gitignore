@@ -8,6 +8,7 @@ videos_test
 plots_test
 loss_files_test
 kinetics_debug.py
+test.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
