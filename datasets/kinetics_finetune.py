@@ -10,7 +10,7 @@ import torchvision
 import torchvision.io as io
 import kornia
 
-from datasets.transform import resize
+from datasets.transform import resize, uniform_crop
 from datasets.data_utils import get_random_sampling_rate, tensor_normalize, spatial_sampling, pack_pathway_output
 from datasets.decoder import decode, decode_custom
 from datasets.video_container import get_video_container
@@ -19,7 +19,7 @@ from einops import rearrange
 from visualization import save_tensor_as_video
 
 
-class Kinetics(torch.utils.data.Dataset):
+class KineticsFinetune(torch.utils.data.Dataset):
     """
     Kinetics video loader. Construct the Kinetics video loader, then sample
     clips from the videos. For training and validation, a single clip is
@@ -224,7 +224,7 @@ class Kinetics(torch.utils.data.Dataset):
                 continue
 
             # Decode video. Meta info is used to perform selective decoding.
-            frames = decode(
+            frames = decode_custom(
                 container=video_container,
                 sampling_rate=sampling_rate,
                 num_frames=self.cfg.DATA.NUM_FRAMES,
@@ -277,6 +277,8 @@ class Kinetics(torch.utils.data.Dataset):
                 if not self.cfg.MODEL.ARCH in ['vit']:
                     frames = pack_pathway_output(self.cfg, frames)
 
+                # removed temporal sampling
+                """
                 else:
                     # Perform temporal sampling from the fast pathway.
                     frames = torch.index_select(
@@ -287,8 +289,22 @@ class Kinetics(torch.utils.data.Dataset):
 
                         ).long(),
                     )
+                """
 
-            else:
+            else:        
+                # Perform color normalization.
+                frames = [tensor_normalize(x, self.cfg.DATA.MEAN, self.cfg.DATA.STD) for x in frames]
+
+                # T H W C -> T C H W.
+                frames = [x.permute(0, 3, 1, 2) for x in frames]
+
+                frames[0], _ = uniform_crop(frames[0], 224, spatial_idx=1)
+                frames[1], _ = uniform_crop(frames[1], 224, spatial_idx=1)
+
+                # T C H W -> C T H W.
+                frames = [x.permute(1, 0, 2, 3) for x in frames]
+
+                """
                 # T H W C -> T C H W.
                 frames = [rearrange(x, "t h w c -> t c h w") for x in frames]
 
@@ -299,7 +315,7 @@ class Kinetics(torch.utils.data.Dataset):
 
                 # T C H W -> C T H W.
                 frames = [rearrange(x, "t c h w -> c t h w") for x in frames]
-                
+   
                 # Perform temporal sampling from the fast pathway.
                 frames = [torch.index_select(
                     x,
@@ -309,6 +325,7 @@ class Kinetics(torch.utils.data.Dataset):
 
                     ).long(),
                 ) for x in frames]
+                """
 
             meta_data = {}
             if self.get_flow:
@@ -321,14 +338,13 @@ class Kinetics(torch.utils.data.Dataset):
                         flow_tensor = resize(flow_tensor, size=self.cfg.DATA.CROP_SIZE, mode="bicubic")
                         flow_tensor = [x for x in flow_tensor]
                     else:
-                        flow_tensor = augmentation(flow_tensor)
+                        #flow_tensor = augmentation(flow_tensor)
                         flow_tensor = [rearrange(x, "t c h w -> c t h w") for x in flow_tensor]
                     meta_data["flow"] = flow_tensor
                 except Exception as e:
                     print(e)
                     continue
-            
-            #breakpoint()
+
             return frames, label, index, meta_data
 
         else:
@@ -367,7 +383,7 @@ if __name__ == '__main__':
     # config.DATA.PATH_TO_DATA_DIR = "/home/kanchanaranasinghe/data/kinetics400/k400-mini"
     config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
     # dataset = Kinetics(cfg=config, mode="val", num_retries=10)
-    dataset = Kinetics(cfg=config, mode="test", num_retries=10, get_flow=True)
+    dataset = KineticsFinetune(cfg=config, mode="test", num_retries=10, get_flow=True)
     print(f"Loaded train dataset of length: {len(dataset)}")
     dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=4)
     for idx, i in enumerate(dataloader):

@@ -5,6 +5,8 @@ import numpy as np
 import random
 import torch
 import torchvision.io as io
+from torchvision.utils import save_image
+from visualization import save_tensor_as_video
 
 
 def temporal_sampling(frames, start_idx, end_idx, num_samples):
@@ -486,7 +488,6 @@ def decode_custom(
     Returns:
         frames (tensor): decoded frames from the video.
     """
-    #breakpoint()
     # Currently support two decoders: 1) PyAV, and 2) TorchVision.
     assert clip_idx >= -1, "Not valied clip_idx {}".format(clip_idx)
     try:
@@ -550,8 +551,6 @@ def decode_custom(
             local_samples.append(cur_local)
         frames = [*global_samples, *local_samples]
     elif temporal_aug:
-        #breakpoint()
-        # Is only called in train mode!!!!!!!!! this is the relevant part
         max_len = frames.shape[0]
 
         if rand_fr:
@@ -565,16 +564,55 @@ def decode_custom(
                 cur_local = temporal_sampling(frames, random_idx, random_idx + local_width, num_local_frames[l_idx])
                 local_samples.append(cur_local)
         else:
-            num_global_frames = 60
-            num_local_frames = 3
-            global_1 = temporal_sampling(frames, 0, max_len - 10, num_global_frames)
-            global_2 = temporal_sampling(frames, 10, max_len, num_global_frames)
+
+            #breakpoint()
+
+            num_global_frames = num_frames
+            num_local_frames = num_frames
+            global_1 = temporal_sampling(frames, 0, max_len - 5, num_global_frames) #stays
+            global_2 = temporal_sampling(frames, 5, max_len, num_global_frames) #stays
+
             local_samples = []
-            local_width = max_len // 24
-            for _ in range(8):
-                random_idx = random.randint(0, max_len - local_width - 1)
-                cur_local = temporal_sampling(frames, random_idx, random_idx + local_width, num_local_frames)
-                local_samples.append(cur_local)
+            local_width = max_len // 8
+            random_idx = random.randint(0, max_len - local_width - 1)
+            local_frame = temporal_sampling(frames, random_idx, random_idx, 1)
+
+            # 36 overlapping left and right horizontally and 32 overlapping ltop and bottom vertically
+            x_start = 36
+            y_start = 32
+            local_frame = torch.squeeze(local_frame, 0)
+
+
+            # size isnt 96x96 sometimes, fix pls (maybe erst resizen)
+            if frames.shape[2] == 456:
+                for i in range(8):
+                    cur_local = local_frame[y_start:y_start+96, x_start:x_start+96, :]
+                    cur_local = torch.unsqueeze(cur_local, 0)
+                    local_samples.append(cur_local)
+                    x_start = x_start+96
+
+                    if i == 3:
+                        y_start = y_start+96
+                        x_start = 36
+            else:
+                None
+
+            """
+            breakpoint()
+
+            #for d in range(8):
+            #    cur_frame = local_samples[d][0].permute(2, 0, 1).float()
+            #    save_image(cur_frame / 255, 'videos_test/local_' + str(d) + '.png')
+
+            save_image(local_frame.permute(2, 0, 1).float() / 255, 'videos_test/local_whole.png')
+
+            # T H W C -> C T H W.
+            global_test = global_1.permute(3, 0, 1, 2)
+
+            save_tensor_as_video(global_test, "global_1")
+            """
+            
+            
 
         frames = [global_1, global_2, *local_samples]
 

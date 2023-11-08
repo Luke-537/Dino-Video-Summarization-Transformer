@@ -1,10 +1,9 @@
 #!/bin/bash
 
 PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
-EXP_NAME="le_001"
 DATASET="kinetics400"
 DATA_PATH="/graphics/scratch/datasets/MSVD/YouTubeClips"
-CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_60x16_224/checkpoint.pth"
+CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
 
 cd "$PROJECT_PATH" || exit
 
@@ -25,9 +24,14 @@ python -m torch.distributed.launch \
   --num_workers 4 \
   --num_labels 400 \
   --dataset "$DATASET" \
+  --cfg "models/configs/Kinetics/TimeSformer_divST_custom_224.yaml" \
   --output_dir "checkpoints/eval/$EXP_NAME" \
   --opts \
   DATA.PATH_TO_DATA_DIR "/home/reutemann/Dino-Video-Summarization-Transformer/MSVD" \
   DATA.PATH_PREFIX "${DATA_PATH}" \
   DATA.USE_FLOW False
   
+#--cfg "models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml" \
+#--cfg "models/configs/Kinetics/TimeSformer_divST_60x16_224.yaml" \
+#CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
+#CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_60x16_224/checkpoint.pth"

@@ -9,6 +9,8 @@ plots_test
 loss_files_test
 kinetics_debug.py
 test.txt
+test_files_finetuning
+test_files_no_finetuning
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

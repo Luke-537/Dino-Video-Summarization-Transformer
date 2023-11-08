@@ -33,12 +33,14 @@ from torchvision import models as torchvision_models
 from utils import utils
 import vision_transformer as vits
 from vision_transformer import DINOHead, MultiDINOHead
+from torchvision.utils import save_image
 
-from datasets import Kinetics
+from datasets import Kinetics, KineticsFinetune
 from datasets.rand_conv import RandConv
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D, S3D
 from utils.parser import load_config
 from eval_knn import extract_features, knn_classifier, UCFReturnIndexDataset, HMDBReturnIndexDataset
+from visualization import save_tensor_as_video
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
                            if name.islower() and not name.startswith("__")
@@ -162,7 +164,7 @@ def train_svt(args):
         json.dump(vars(args), open(Path(args.output_dir) / "config.txt", "w"), indent=4)
     config.DATA.PATH_TO_DATA_DIR = args.data_path
     config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/train"
-    dataset = Kinetics(cfg=config, mode="train", num_retries=10, get_flow=config.DATA.USE_FLOW)
+    dataset = KineticsFinetune(cfg=config, mode="train", num_retries=10, get_flow=config.DATA.USE_FLOW)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
@@ -210,7 +212,7 @@ def train_svt(args):
         embed_dim = student.embed_dim
     # load head student and teacher
         if args.pretrained_rgb is not None:
-            state_dict = torch.load(args.pretrained_rgb)["teacher"]
+            state_dict = torch.load(args.pretrained_rgb)#[teacher]
             state_dict = {x[len("backbone."):]: y for x, y in state_dict.items() if x.startswith("backbone.")}
             msg = student.load_state_dict(state_dict)
             print(f"Loaded pretrained rgb student: {msg}")
@@ -409,7 +411,7 @@ def train_svt(args):
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
     utils.restart_from_checkpoint(
-        os.path.join(args.output_dir, "checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"),
+        os.path.join(args.output_dir, "pathttocheckpoint"),
         run_variables=to_restore,
         student=student,
         teacher=teacher,
@@ -468,6 +470,20 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _, _, meta) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+        
+        """
+        save_tensor_as_video(images[0][0], "train_global_1.mp4")
+        save_tensor_as_video(images[1][0], "train_global_2.mp4")
+        save_image(images[2][0][0], 'videos_test/train_local_1.png')
+        save_image(images[3][0][0], 'videos_test/train_local_2.png')
+        save_image(images[4][0][0], 'videos_test/train_local_3.png')
+        save_image(images[5][0][0], 'videos_test/train_local_4.png')
+        save_image(images[6][0][0], 'videos_test/train_local_5.png')
+        save_image(images[7][0][0], 'videos_test/train_local_6.png')
+        save_image(images[8][0][0], 'videos_test/train_local_7.png')
+        save_image(images[9][0][0], 'videos_test/train_local_8.png')
+        """
+
         # update weight decay and learning rate according to their schedule
         it = len(data_loader) * epoch + it  # global training iteration
         for i, param_group in enumerate(optimizer.param_groups):
@@ -504,6 +520,9 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 teacher_output = teacher(images[:2])  # only 2 global views through the teacher
                 loss = dino_loss(student_output, teacher_output, epoch)
             else:
+                
+                breakpoint()
+                
                 student_output = student(images)
                 if rand_conv is not None:
                     teacher_output = teacher([images[0], rand_conv(images[1])])

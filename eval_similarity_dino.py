@@ -41,38 +41,33 @@ def eval_dino(args, video_path):
     cudnn.benchmark = True
     
     config = load_config(args)
-    
-    # Load the basic model class
-    model = get_vit_base_patch16_224(cfg=config, no_head=False)
 
     # Load the pretrained checkpoint
-    ckpt = torch.load(args.pretrained_weights)
-    renamed_checkpoint = {x[len("backbone."):]: y for x, y in ckpt.items() if x.startswith("backbone.")}
+    ckpt_teacher = torch.load(args.pretrained_weights)#["teacher"]
+    ckpt_student = torch.load(args.pretrained_weights)#["student"]
+    renamed_checkpoint_teacher = {x[len("backbone."):]: y for x, y in ckpt_teacher.items() if x.startswith("backbone.")}
+    renamed_checkpoint_student = {x[len("backbone."):]: y for x, y in ckpt_student.items() if x.startswith("backbone.")}
 
-    # Load the corresponding state dict and switch to eval mode
-    model.load_state_dict(renamed_checkpoint, strict=False)
-    model.cuda()
-    model.eval()
+    # Load teacher and student model class, the corresponding state dict and switch to eval mode
+    student = get_vit_base_patch16_224(cfg=config, no_head=False)
+    teacher = get_vit_base_patch16_224(cfg=config, no_head=False)
+    student.load_state_dict(renamed_checkpoint_student, strict=False)
+    teacher.load_state_dict(renamed_checkpoint_teacher, strict=False)
 
     """
     # Printing the state dict
 
     print("Model's state_dict:")
-    for param_tensor in model.state_dict():
-        print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+    for param_tensor in teacher.state_dict():
+        print(param_tensor, "\t", teacher.state_dict()[param_tensor].size())
 
-    """
-
-    print(ckpt.keys())
+    #print(teacher.keys())
 
     breakpoint()
 
-    # Load teacher and student model class
-    student = get_vit_base_patch16_224(cfg=config, no_head=False)
-    teacher = get_vit_base_patch16_224(cfg=config, no_head=False)
-    student.load_state_dict(renamed_checkpoint, strict=False)
-    teacher.load_state_dict(renamed_checkpoint, strict=False)
+    """
 
+    student, teacher = student.eval(), teacher.eval()
     student, teacher = student.cuda(), teacher.cuda()
 
     # remove?
@@ -81,8 +76,7 @@ def eval_dino(args, video_path):
 
     local_clip_size = 3
     global_clip_size = 60
-    sampling_rate = 4
-    
+    sampling_rate = 8
     
     # load test dataset
     dataset_test = KineticsCustom(
@@ -103,22 +97,19 @@ def eval_dino(args, video_path):
 
     # Instantiate dino loss
     dino_loss = DINOLoss(
-        args.out_dim,
-        2,  # total number of crops = 1 global crops +  1 local crop
-        args.warmup_teacher_temp,
-        args.teacher_temp,
-        args.warmup_teacher_temp_epochs,
-        args.epochs,
-        global_crops=1,
+        out_dim=768,
+        teacher_temp=0.02,
+        student_temp=0.3,
     ).cuda()
 
     for i, (views_list, file_name) in enumerate(test_loader):
+        
         breakpoint()
 
         loss = []
         for x in range(len(views_list)):
-            
-            #save_tensor_as_video(views_list[x][1])
+
+            save_tensor_as_video(views_list[0][1], file_name[0])
 
             print((x+1), "/", len(views_list))
 
@@ -126,7 +117,7 @@ def eval_dino(args, video_path):
             global_views = views_list[x][1::2].cuda(non_blocking=True)
 
             with torch.no_grad():
-                student_output = student(torch.unsqueeze(local_views[0],0))
+                student_output = student(local_views)
                 teacher_output = teacher(global_views)
 
             for y in range(len(student_output)):
@@ -134,11 +125,12 @@ def eval_dino(args, video_path):
 
         export_loss(loss, file_name[0])
         
-        break
+        if i == 3:
+            break
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_files_test/loss_output_test_msvd_finetuned_6.json' 
+    file_path = 'loss_files_test/loss_msvd_sampling_8.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
@@ -179,33 +171,23 @@ def collate_fn_custom(batch):
 # before it needed at least 2 local views
 # also removed the check if model is two token for readability
 class DINOLoss(nn.Module):
-    def __init__(self, out_dim, ncrops, warmup_teacher_temp, teacher_temp,
-                 warmup_teacher_temp_epochs, nepochs, student_temp=0.1,
-                 center_momentum=0.9, global_crops=2, two_token=False):
+    def __init__(self, out_dim, teacher_temp, 
+                 student_temp=0.1):
         super().__init__()
         self.student_temp = student_temp
-        self.center_momentum = center_momentum
-        self.n_crops = ncrops
-        self.global_crops = global_crops
         self.register_buffer("center", torch.zeros(1, out_dim))
-        # Just using the temp, not a schedule beacause no training
-        self.teacher_temp_schedule = teacher_temp
+        self.teacher_temp = teacher_temp
 
     # removed chunking and cumulative loss calculation
     def forward(self, student_output, teacher_output):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """
-        total_loss = 0
-        n_loss_terms = 0
-        
         # Calculate the teacher and student losses for the entire tensors
-        q_teacher = F.softmax((teacher_output - self.center) / self.teacher_temp_schedule, dim=-1)
-        q_student = student_output / self.student_temp
-        total_loss += torch.sum(-q_teacher * F.log_softmax(q_student, dim=-1), dim=-1).mean()
-        n_loss_terms += 1
+        p_teacher = F.softmax((teacher_output - self.center) / self.teacher_temp, dim=-1)
+        p_student = student_output / self.student_temp
+        total_loss = torch.sum(-p_teacher * F.log_softmax(p_student, dim=-1), dim=-1).mean()
         
-        total_loss /= n_loss_terms
         return total_loss
 
 
@@ -257,28 +239,6 @@ if __name__ == '__main__':
         We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
     parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag,
         help="Whether to use batch normalizations in projection head (Default: False)")
-
-    # Temperature teacher parameters
-    parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
-        help="""Initial value for the teacher temperature: 0.04 works well in most cases.
-        Try decreasing it if the training loss does not decrease.""")
-    parser.add_argument('--teacher_temp', default=0.04, type=float, help="""Final value (after linear warmup)
-        of the teacher temperature. For most experiments, anything above 0.07 is unstable. We recommend
-        starting with the default value of 0.04 and increase this slightly if needed.""")
-    parser.add_argument('--warmup_teacher_temp_epochs', default=0, type=int,
-        help='Number of warmup epochs for the teacher temperature (Default: 30).')
-    
-    # Multi-crop parameters
-    parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
-                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
-        Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we
-        recommand using a wider range of scale ("--global_crops_scale 0.14 1." for example)""")
-    parser.add_argument('--local_crops_number', type=int, default=8, help="""Number of small
-        local views to generate. Set this parameter to 0 to disable multi-crop training.
-        When disabling multi-crop we recommend to use "--global_crops_scale 0.14 1." """)
-    parser.add_argument('--local_crops_scale', type=float, nargs='+', default=(0.05, 0.4),
-                        help="""Scale range of the cropped image before resizing, relatively to the origin image.
-        Used for small local view cropping of multi-crop.""")
 
     args = parser.parse_args()
     video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/__7xZtQ9fz0_000140_000150.mp4"
