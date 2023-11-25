@@ -7,15 +7,11 @@ CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/mod
 
 cd "$PROJECT_PATH" || exit
 
-if [ ! -d "checkpoints/$EXP_NAME" ]; then
-  mkdir "checkpoints/$EXP_NAME"
-fi
-
 export CUDA_VISIBLE_DEVICES=4
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
-  eval_similarity_dino.py \
+  dino_similarity.py \
   --arch "vit_base" \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 20 \

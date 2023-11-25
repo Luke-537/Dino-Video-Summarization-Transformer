@@ -36,7 +36,7 @@ from utils.parser import load_config
 from visualization import save_tensor_as_video
 
 
-def eval_dino(args, video_path):
+def dino_similarity(args, video_path):
     utils.init_distributed_mode(args)
     cudnn.benchmark = True
     
@@ -113,6 +113,8 @@ def eval_dino(args, video_path):
 
         save_tensor_as_video(video[0], "test_data/video_5/video_5.mp4")
         """
+
+        breakpoint()
 
         loss = []
         for x in range(len(views_list)):
@@ -249,4 +251,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/__7xZtQ9fz0_000140_000150.mp4"
 
-    eval_dino(args, video_path)
+    dino_similarity(args, video_path)

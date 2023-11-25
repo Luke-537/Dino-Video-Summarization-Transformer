@@ -69,11 +69,11 @@ class DinoLossLoader(torch.utils.data.Dataset):
                     self._video_meta[clip_idx * self._num_clips + idx] = {}
         assert (
                 len(self._path_to_videos) > 0
-        ), "Failed to load Kinetics split {} from {}".format(
+        ), "Failed to load data split {} from {}".format(
             self._split_idx, path_to_file
         )
         print(
-            "Constructing kinetics dataloader (size: {}) from {}".format(
+            "Constructing dataloader (size: {}) from {}".format(
                 len(self._path_to_videos), path_to_file
             )
         )
