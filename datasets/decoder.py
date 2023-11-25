@@ -7,6 +7,8 @@ import torch
 import torchvision.io as io
 from torchvision.utils import save_image
 from visualization import save_tensor_as_video
+from torchvision.transforms import functional as tf
+from datasets.transform import uniform_crop
 
 
 def temporal_sampling(frames, start_idx, end_idx, num_samples):
@@ -578,24 +580,26 @@ def decode_custom(
             local_frame = temporal_sampling(frames, random_idx, random_idx, 1)
 
             # 36 overlapping left and right horizontally and 32 overlapping ltop and bottom vertically
-            x_start = 36
-            y_start = 32
+            x_start = 0
+            y_start = 24
+
+            # resize to 224x240 for corret overlapping
+            local_frame = local_frame.permute(0, 3, 1, 2)
+            local_frame, _ = uniform_crop(local_frame, 240, spatial_idx=1)
+            local_frame = local_frame.permute(0, 2, 3, 1)
+
             local_frame = torch.squeeze(local_frame, 0)
+                
+            for i in range(8):
+                cur_local = local_frame[y_start:y_start+96, x_start:x_start+96, :]
+                cur_local = torch.unsqueeze(cur_local, 0)
+                local_samples.append(cur_local)
+                x_start = x_start+48
 
+                if i == 3:
+                    y_start = y_start+96
+                    x_start = 0
 
-            # size isnt 96x96 sometimes, fix pls (maybe erst resizen)
-            if frames.shape[2] == 456:
-                for i in range(8):
-                    cur_local = local_frame[y_start:y_start+96, x_start:x_start+96, :]
-                    cur_local = torch.unsqueeze(cur_local, 0)
-                    local_samples.append(cur_local)
-                    x_start = x_start+96
-
-                    if i == 3:
-                        y_start = y_start+96
-                        x_start = 36
-            else:
-                None
 
             """
             breakpoint()
@@ -611,8 +615,6 @@ def decode_custom(
 
             save_tensor_as_video(global_test, "global_1")
             """
-            
-            
 
         frames = [global_1, global_2, *local_samples]
 

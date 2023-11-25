@@ -11,7 +11,7 @@ if [ ! -d "checkpoints/$EXP_NAME" ]; then
   mkdir "checkpoints/$EXP_NAME"
 fi
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=4
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
@@ -24,7 +24,7 @@ python -m torch.distributed.launch \
   --num_workers 4 \
   --num_labels 400 \
   --dataset "$DATASET" \
-  --cfg "models/configs/Kinetics/TimeSformer_divST_custom_224.yaml" \
+  --cfg "models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml" \
   --output_dir "checkpoints/eval/$EXP_NAME" \
   --opts \
   DATA.PATH_TO_DATA_DIR "/home/reutemann/Dino-Video-Summarization-Transformer/MSVD" \
@@ -32,6 +32,6 @@ python -m torch.distributed.launch \
   DATA.USE_FLOW False
   
 #--cfg "models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml" \
-#--cfg "models/configs/Kinetics/TimeSformer_divST_60x16_224.yaml" \
+#--cfg "models/configs/Kinetics/TimeSformer_divST_custom_224.yaml" \
 #CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
-#CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_60x16_224/checkpoint.pth"
+#CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/kinetics400_vitb_ssl_finetuned_lower_learning_rate_8x2_224/checkpoint.pth"

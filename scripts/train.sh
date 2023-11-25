@@ -2,7 +2,7 @@
 
 PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
 DATA_PATH="/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
-EXP_NAME="kinetics400_vitb_ssl_finetuned_8x4_224"
+EXP_NAME="kinetics400_vitb_ssl_finetuned_lower_learning_rate_8x2_224"
 
 cd "$PROJECT_PATH" || exit
 
@@ -10,18 +10,19 @@ if [ ! -d "checkpoints/$EXP_NAME" ]; then
   mkdir "checkpoints/$EXP_NAME"
 fi
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2,3
 
 python -m torch.distributed.launch \
-  --nproc_per_node=1 \
+  --nproc_per_node=2 \
   --master_port="$RANDOM" \
   train_ssl.py \
   --arch "timesformer" \
-  --batch_size_per_gpu 1 \
+  --batch_size_per_gpu 4 \
   --data_path "${DATA_PATH}" \
   --output_dir "checkpoints/$EXP_NAME" \
   --epochs 1 \
   --warmup_epochs 0 \
+  --lr 0.00005 \
   --cfg "models/configs/Kinetics/TimeSformer_divST_custom_224.yaml" \
   --pretrained_rgb "/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth" \
   --opts \

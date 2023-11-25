@@ -470,18 +470,20 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _, _, meta) in enumerate(metric_logger.log_every(data_loader, 10, header)):
+
+        #breakpoint()
         
         """
-        save_tensor_as_video(images[0][0], "train_global_1.mp4")
-        save_tensor_as_video(images[1][0], "train_global_2.mp4")
-        save_image(images[2][0][0], 'videos_test/train_local_1.png')
-        save_image(images[3][0][0], 'videos_test/train_local_2.png')
-        save_image(images[4][0][0], 'videos_test/train_local_3.png')
-        save_image(images[5][0][0], 'videos_test/train_local_4.png')
-        save_image(images[6][0][0], 'videos_test/train_local_5.png')
-        save_image(images[7][0][0], 'videos_test/train_local_6.png')
-        save_image(images[8][0][0], 'videos_test/train_local_7.png')
-        save_image(images[9][0][0], 'videos_test/train_local_8.png')
+        save_tensor_as_video(images[0][0], "test_data/train_images/train_global_1.mp4")
+        save_tensor_as_video(images[1][0], "test_data/train_images/train_global_2.mp4")
+        save_image(images[2][0][0], 'test_data/train_images/train_images/train_local_1.png')
+        save_image(images[3][0][0], 'test_data/train_images/train_images/train_local_2.png')
+        save_image(images[4][0][0], 'test_data/train_images/train_images/train_local_3.png')
+        save_image(images[5][0][0], 'test_data/train_images/train_images/train_local_4.png')
+        save_image(images[6][0][0], 'test_data/train_images/train_images/train_local_5.png')
+        save_image(images[7][0][0], 'test_data/train_images/train_images/train_local_6.png')
+        save_image(images[8][0][0], 'test_data/train_images/train_images/train_local_7.png')
+        save_image(images[9][0][0], 'test_data/train_images/train_images/train_local_8.png')
         """
 
         # update weight decay and learning rate according to their schedule
@@ -520,9 +522,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
                 teacher_output = teacher(images[:2])  # only 2 global views through the teacher
                 loss = dino_loss(student_output, teacher_output, epoch)
             else:
-                
-                breakpoint()
-                
                 student_output = student(images)
                 if rand_conv is not None:
                     teacher_output = teacher([images[0], rand_conv(images[1])])

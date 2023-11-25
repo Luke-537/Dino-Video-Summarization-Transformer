@@ -28,7 +28,7 @@ from torch import nn
 from tqdm import tqdm
 from torchvision.transforms import functional as tf
 
-from datasets import UCF101, HMDB51, Kinetics, KineticsCustom
+from datasets import UCF101, HMDB51, Kinetics, DinoLossLoader
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D
 from utils import utils
 from utils.meters import TestMeter
@@ -75,11 +75,11 @@ def eval_dino(args, video_path):
     #teacher = nn.parallel.DistributedDataParallel(teacher, device_ids=[args.gpu], find_unused_parameters=False)
 
     local_clip_size = 3
-    global_clip_size = 60
+    global_clip_size = 30
     sampling_rate = 8
     
     # load test dataset
-    dataset_test = KineticsCustom(
+    dataset_test = DinoLossLoader(
         cfg=config,
         mode="test",
         local_clip_size=local_clip_size, 
@@ -99,21 +99,29 @@ def eval_dino(args, video_path):
     dino_loss = DINOLoss(
         out_dim=768,
         teacher_temp=0.02,
-        student_temp=0.3,
+        student_temp=0.5,
     ).cuda()
 
-    for i, (views_list, file_name) in enumerate(test_loader):
+    for i, (views_list, file_name, video) in enumerate(test_loader):
+        """
+        if(i > 5):
+            break
         
-        breakpoint()
+        if(i < 5):
+            continue
+
+
+        save_tensor_as_video(video[0], "test_data/video_5/video_5.mp4")
+        """
 
         loss = []
         for x in range(len(views_list)):
 
-            save_tensor_as_video(views_list[0][1], file_name[0])
+            #save_tensor_as_video(views_list[0][1], "test_data/videos/video.mp4")
 
             print((x+1), "/", len(views_list))
 
-            local_views = views_list[x][::2].cuda(non_blocking=True)
+            local_views = views_list[x][::2, :, :local_clip_size, :, :].cuda(non_blocking=True)
             global_views = views_list[x][1::2].cuda(non_blocking=True)
 
             with torch.no_grad():
@@ -125,12 +133,10 @@ def eval_dino(args, video_path):
 
         export_loss(loss, file_name[0])
         
-        if i == 3:
-            break
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_files_test/loss_msvd_sampling_8.json' 
+    file_path = 'test_data/video_5/loss_no_finetuning_5_test.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
@@ -154,7 +160,7 @@ def export_loss(loss_list, video_path):
 
 def collate_fn_custom(batch):
     # Unzip the batch to separate the lists of tensors and the list of labels
-    list_of_tensors, labels = zip(*batch)
+    list_of_tensors, labels, video = zip(*batch)
 
     batched_list = []
 
@@ -164,7 +170,7 @@ def collate_fn_custom(batch):
         batched_list.append(torch.stack(list_of_tensors[0][i:j]))
         i = j
 
-    return batched_list, labels
+    return batched_list, labels, video
 
 
 # DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 

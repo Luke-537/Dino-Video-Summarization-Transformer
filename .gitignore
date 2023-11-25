@@ -2,15 +2,10 @@
 .idea
 .DS_Store
 checkpoints
-check_for_head.py
 /data
-videos_test
-plots_test
-loss_files_test
+test_data
 kinetics_debug.py
-test.txt
-test_files_finetuning
-test_files_no_finetuning
+outdated_scripts
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

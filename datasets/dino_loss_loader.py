@@ -19,7 +19,7 @@ from datasets.video_container import get_video_container
 from datasets.transform import VideoDataAugmentationDINO
 from einops import rearrange
 
-class KineticsCustom(torch.utils.data.Dataset):
+class DinoLossLoader(torch.utils.data.Dataset):
 
     def __init__(self, cfg, mode, local_clip_size, global_clip_size, sampling_rate):
         self.cfg = cfg
@@ -81,14 +81,14 @@ class KineticsCustom(torch.utils.data.Dataset):
     
     def __getitem__(self, index):
         video, audio, info = io.read_video(self._path_to_videos[index], pts_unit='sec')
-        frames = video.to(torch.float)
+        frames_unsampled = video.to(torch.float)
 
         #breakpoint()
 
         # only sample every n-th frame
-        frames = frames[::self.sampling_rate]
+        frames_sampled = frames_unsampled[::self.sampling_rate]
 
-        frames = tensor_normalize(frames, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
+        frames = tensor_normalize(frames_sampled, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
 
         """
         # T H W C -> C T H W.
@@ -128,10 +128,10 @@ class KineticsCustom(torch.utils.data.Dataset):
 
         if size_match(views_list):
 
-            return views_list, self._path_to_videos[index]
+            return views_list, self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)
         else:
 
-            return self.dummy_list, self._path_to_videos[index]
+            return self.dummy_list, self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)
 
 
     def __len__(self):
