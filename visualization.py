@@ -93,7 +93,7 @@ def save_tensor_as_video(tensor, video_path):
 
 
 if __name__ == '__main__':
-    sampling_rate = 8
-    loss_file_path = "test_data/video_5/loss_no_finetuning_5_test.json"
-    plot_loss(loss_file_path, sampling_rate, "test_data/video_5/plot_no_finetuning_5_test.png", 0)
+    sampling_rate = 2
+    loss_file_path = "loss_values/loss_msvd_2_3_30.json"
+    plot_loss(loss_file_path, sampling_rate, "loss_values/loss_msvd_2_3_30.png", 65)
     

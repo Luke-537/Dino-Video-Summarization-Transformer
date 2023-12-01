@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import json
+import math
 import csv
 import os
 import torch
@@ -76,7 +77,7 @@ def dino_similarity(args, video_path):
 
     local_clip_size = 3
     global_clip_size = 30
-    sampling_rate = 8
+    sampling_rate = 2
     
     # load test dataset
     dataset_test = DinoLossLoader(
@@ -92,39 +93,35 @@ def dino_similarity(args, video_path):
         #batch_size=args.batch_size_per_gpu,
         num_workers=args.num_workers,
         pin_memory=True,
-        collate_fn=collate_fn_custom,
+        #collate_fn=collate_fn_custom,
     )
 
     # Instantiate dino loss
     dino_loss = DINOLoss(
         out_dim=768,
         teacher_temp=0.02,
-        student_temp=0.5,
+        student_temp=0.3,
     ).cuda()
 
     for i, (views_list, file_name, video) in enumerate(test_loader):
-        """
-        if(i > 5):
-            break
-        
-        if(i < 5):
-            continue
 
+        print(i+1, "/" ,len(test_loader))
 
-        save_tensor_as_video(video[0], "test_data/video_5/video_5.mp4")
-        """
-
-        breakpoint()
+        views = torch.squeeze(views_list, 0)
 
         loss = []
-        for x in range(len(views_list)):
+        batch = 0
+        for x in range(math.ceil(len(views)/args.batch_size_per_gpu)):
 
-            #save_tensor_as_video(views_list[0][1], "test_data/videos/video.mp4")
+            #breakpoint()
+            
+            batch_new = batch + args.batch_size_per_gpu
 
-            print((x+1), "/", len(views_list))
+            local_views = views[batch:batch_new][::2, :, :local_clip_size, :, :].cuda(non_blocking=True)
+            global_views = views[batch:batch_new][1::2].cuda(non_blocking=True)
 
-            local_views = views_list[x][::2, :, :local_clip_size, :, :].cuda(non_blocking=True)
-            global_views = views_list[x][1::2].cuda(non_blocking=True)
+            #save_tensor_as_video(global_views[0].cpu(), "video_test_global.mp4")
+            #save_tensor_as_video(local_views[0].cpu(), "video_test_local.mp4")
 
             with torch.no_grad():
                 student_output = student(local_views)
@@ -133,12 +130,14 @@ def dino_similarity(args, video_path):
             for y in range(len(student_output)):
                 loss.append(dino_loss.forward(student_output[y], teacher_output[y]).item())
 
+            batch = batch_new
+
         export_loss(loss, file_name[0])
         
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'test_data/video_5/loss_no_finetuning_5_test.json' 
+    file_path = 'loss_values/loss_msvd_2_3_30.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
@@ -159,7 +158,7 @@ def export_loss(loss_list, video_path):
         with open(file_path, 'w') as file:
             json.dump(video_dict, file)
 
-
+"""
 def collate_fn_custom(batch):
     # Unzip the batch to separate the lists of tensors and the list of labels
     list_of_tensors, labels, video = zip(*batch)
@@ -172,8 +171,8 @@ def collate_fn_custom(batch):
         batched_list.append(torch.stack(list_of_tensors[0][i:j]))
         i = j
 
-    return batched_list, labels, video
-
+    return torch.stack(batched_list), labels, video
+"""
 
 # DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 
 # before it needed at least 2 local views

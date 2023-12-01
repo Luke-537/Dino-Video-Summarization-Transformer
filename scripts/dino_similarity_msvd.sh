@@ -7,7 +7,7 @@ CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/mod
 
 cd "$PROJECT_PATH" || exit
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=0
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
@@ -16,7 +16,7 @@ python -m torch.distributed.launch \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 20 \
   --lr 0.001 \
-  --batch_size_per_gpu 8 \
+  --batch_size_per_gpu 4 \
   --num_workers 4 \
   --num_labels 400 \
   --dataset "$DATASET" \

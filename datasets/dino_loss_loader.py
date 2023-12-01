@@ -42,6 +42,7 @@ class DinoLossLoader(torch.utils.data.Dataset):
 
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
+            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small_1.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -131,7 +132,7 @@ class DinoLossLoader(torch.utils.data.Dataset):
             return views_list, self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)
         else:
 
-            return self.dummy_list, self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)
+            return torch.stack(self.dummy_list), self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)
 
 
     def __len__(self):
@@ -143,7 +144,7 @@ def size_match(list):
     same_size = True
 
     for tensor in list[1:]:
-        if tensor.shape != list[0].shape:
+        if tensor.shape != list[0].shape or tensor.size(-2) != 224 or tensor.size(-1) != 224:
             same_size = False
     
     return same_size
@@ -191,7 +192,7 @@ def get_views_of_video_same_size(frames, local_size, global_size):
         views_list.append(tensor_padded)
         views_list.append(tensor_global)
 
-    return views_list
+    return torch.stack(views_list)
 
 
 """

@@ -23,11 +23,11 @@ from einops import rearrange
 
 class FrameSelectionLoader(torch.utils.data.Dataset):
 
-    def __init__(self, cfg, mode, loss_file, sampling_rate_loss, selection_method="uniform"):
+    def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform"):
         self.cfg = cfg
         self.mode = mode
 
-        self.sampling_rate_loss = sampling_rate_loss
+        self.pre_sampling_rate = pre_sampling_rate
         self.selection_method = selection_method
 
         self._video_meta = {}
@@ -43,6 +43,7 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
 
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
+            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small_1.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -84,16 +85,14 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
         video, audio, info = io.read_video(self._path_to_videos[index], pts_unit='sec')
         frames_unsampled = video.to(torch.float)
 
-        frames_sampled = frames_unsampled[::self.sampling_rate_loss]
+        frames_sampled = frames_unsampled[::self.pre_sampling_rate]
         frames = tensor_normalize(frames_sampled, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
 
         # T H W C -> T C H W.
         frames = frames.permute(0, 3, 1, 2)
         frames, _ = uniform_crop(frames, size=self.crop_size, spatial_idx=1) # adjust params
 
-        if self.selection_method == "adaptive":
-            breakpoint()
-            
+        if self.selection_method == "adaptive":   
             # Get the file name and then the loss values
             file_name = os.path.basename(self._path_to_videos[index])
             key = os.path.splitext(file_name)[0]
@@ -110,9 +109,9 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             indices = []
             for i in range(N):
                 # Find the frame index corresponding to the quantile
-                value = i / N
-                array = np.asarray(cdf)
-                idx = (np.abs(array - value)).argmin()
+                j = i / N
+                cdf_array = np.asarray(cdf)
+                idx = (np.abs(cdf_array - j)).argmin()
                 selected_frames.append(frames[idx])
                 indices.append(idx)
 
@@ -120,14 +119,13 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             
         else:
             # only sample every n-th frame
-            frames = frames[::10]
-
-        breakpoint()
+            N = int(frames.size(0) / 32)
+            frames = frames[::N]
 
         # T C H W -> C T H W.
         frames = frames.permute(1, 0, 2, 3)
 
-        return frames, self._path_to_videos[index]
+        return frames, self._path_to_videos[index], self._labels[index]
 
     def __len__(self):
 
