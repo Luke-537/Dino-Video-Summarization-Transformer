@@ -20,7 +20,7 @@ from pathlib import Path
 from torch import nn
 from tqdm import tqdm
 
-from datasets import UCF101, HMDB51, Kinetics
+from datasets import UCF101, HMDB51, Kinetics, FrameSelectionLoader
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D
 from utils import utils
 from utils.meters import TestMeter
@@ -51,8 +51,8 @@ def eval_linear(args):
         config.TEST.NUM_SPATIAL_CROPS = 3
         multi_crop_val = HMDB51(cfg=config, mode="val", num_retries=10)
     elif args.dataset == "kinetics400":
-        dataset_train = Kinetics(cfg=config, mode="train", num_retries=10)
-        dataset_val = Kinetics(cfg=config, mode="val", num_retries=10)
+        dataset_train = FrameSelectionLoader(cfg=config, mode="test", loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_small_2_3_30.json", pre_sampling_rate=2, selection_method="adaptive")
+        dataset_val = FrameSelectionLoader(cfg=config, mode="test", loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_small_2_3_30.json", pre_sampling_rate=2, selection_method="adaptive")
         config.TEST.NUM_SPATIAL_CROPS = 3
         multi_crop_val = Kinetics(cfg=config, mode="val", num_retries=10)
     else:
@@ -172,8 +172,8 @@ def eval_linear(args):
             }
             torch.save(save_dict, os.path.join(args.output_dir, "checkpoint.pth.tar"))
 
-    test_stats = validate_network_multi_view(multi_crop_val_loader, model, linear_classifier, args.n_last_blocks,
-                                             args.avgpool_patchtokens, config)
+    #test_stats = validate_network_multi_view(multi_crop_val_loader, model, linear_classifier, args.n_last_blocks,
+    #                                         args.avgpool_patchtokens, config)
     print(test_stats)
 
     print("Training of the supervised linear classifier on frozen features completed.\n"
@@ -181,13 +181,16 @@ def eval_linear(args):
 
 
 def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
+
+    breakpoint()
+
     linear_classifier.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     for (inp, target, sample_idx, meta) in metric_logger.log_every(loader, 20, header):
         # move to gpu
-        inp = inp[0].cuda(non_blocking=True)
+        inp = inp.cuda(non_blocking=True) #removed [0]
         target = target.cuda(non_blocking=True)
 
         # forward

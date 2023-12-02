@@ -40,7 +40,7 @@ from datasets.rand_conv import RandConv
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D, S3D
 from utils.parser import load_config
 from eval_knn import extract_features, knn_classifier, UCFReturnIndexDataset, HMDBReturnIndexDataset
-from visualization import save_tensor_as_video
+from testing.visualization import save_tensor_as_video
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
                            if name.islower() and not name.startswith("__")

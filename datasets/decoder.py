@@ -6,7 +6,7 @@ import random
 import torch
 import torchvision.io as io
 from torchvision.utils import save_image
-from visualization import save_tensor_as_video
+from testing.visualization import save_tensor_as_video
 from torchvision.transforms import functional as tf
 from datasets.transform import uniform_crop
 

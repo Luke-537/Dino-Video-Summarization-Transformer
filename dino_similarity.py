@@ -34,7 +34,7 @@ from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3
 from utils import utils
 from utils.meters import TestMeter
 from utils.parser import load_config
-from visualization import save_tensor_as_video
+from testing.visualization import save_tensor_as_video
 
 
 def dino_similarity(args, video_path):
@@ -77,7 +77,7 @@ def dino_similarity(args, video_path):
 
     local_clip_size = 3
     global_clip_size = 30
-    sampling_rate = 2
+    sampling_rate = 4
     
     # load test dataset
     dataset_test = DinoLossLoader(
@@ -137,7 +137,7 @@ def dino_similarity(args, video_path):
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_values/loss_msvd_2_3_30.json' 
+    file_path = 'loss_values/loss_kinetics_test_3-4_3_30.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

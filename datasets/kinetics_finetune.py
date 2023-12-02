@@ -16,7 +16,7 @@ from datasets.decoder import decode, decode_custom
 from datasets.video_container import get_video_container
 from datasets.transform import VideoDataAugmentationDINO
 from einops import rearrange
-from visualization import save_tensor_as_video
+from testing.visualization import save_tensor_as_video
 
 
 class KineticsFinetune(torch.utils.data.Dataset):

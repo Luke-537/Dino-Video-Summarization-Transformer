@@ -24,6 +24,7 @@ from einops import rearrange
 class FrameSelectionLoader(torch.utils.data.Dataset):
 
     def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform"):
+
         self.cfg = cfg
         self.mode = mode
 
@@ -40,10 +41,9 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
         with open(loss_file, 'r') as file:
             self.loss_dict = json.load(file)
 
-
         path_to_file = os.path.join(
             self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
-            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small_1.csv".format(self.mode)
+            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -98,7 +98,7 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             key = os.path.splitext(file_name)[0]
             loss_list = self.loss_dict[key]
 
-            # Normalizing the loss values to create a PDF
+            # Normalizing the loss values to create a PDF, might need to scale
             pdf = loss_list / np.sum(loss_list)
 
             # Create the CDF from the PDF
@@ -125,9 +125,15 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
         # T C H W -> C T H W.
         frames = frames.permute(1, 0, 2, 3)
 
-        return frames, self._path_to_videos[index], self._labels[index]
+        meta_data = {}
+        tensor_empty = torch.zeros([3, 32, 224, 224])
+
+        if frames.shape == tensor_empty.shape:
+            return frames, self._labels[index], index, meta_data
+        
+        else:
+            return tensor_empty, self._labels[index], index, meta_data
 
     def __len__(self):
 
         return len(self._path_to_videos)
-    
