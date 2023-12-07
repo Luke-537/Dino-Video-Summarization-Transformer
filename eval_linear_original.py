@@ -186,7 +186,7 @@ def train(model, linear_classifier, optimizer, loader, epoch, n, avgpool):
     header = 'Epoch: [{}]'.format(epoch)
     for (inp, target, sample_idx, meta) in metric_logger.log_every(loader, 20, header):
         # move to gpu
-        inp = inp.cuda(non_blocking=True)
+        inp = inp[0].cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
 
         # forward
@@ -308,7 +308,7 @@ class LinearClassifier(nn.Module):
     def __init__(self, dim, num_labels=1000):
         super(LinearClassifier, self).__init__()
         self.num_labels = num_labels
-        self.linear = nn.Linear(dim, num_labels)
+        self.linear = nn.Linear(768, num_labels)
         self.linear.weight.data.normal_(mean=0.0, std=0.01)
         self.linear.bias.data.zero_()
 

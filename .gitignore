@@ -6,6 +6,7 @@ checkpoints
 test_data
 kinetics_debug.py
 outdated_scripts
+/videos_sampled
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

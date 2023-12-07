@@ -64,7 +64,7 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
                 )
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(
-                        os.path.join(self.cfg.DATA.PATH_PREFIX, path)
+                        os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
                     )
                     self._labels.append(int(label))
                     self._spatial_temporal_idx.append(idx)
@@ -98,13 +98,16 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             key = os.path.splitext(file_name)[0]
             loss_list = self.loss_dict[key]
 
+            #sharpening the values
+            loss_list = np.asarray(loss_list) ** 3
+
             # Normalizing the loss values to create a PDF, might need to scale
             pdf = loss_list / np.sum(loss_list)
 
             # Create the CDF from the PDF
             cdf = np.cumsum(pdf)
 
-            N = 32  # Number of frames to select
+            N = 8  # Number of frames to select
             selected_frames = []
             indices = []
             for i in range(N):
@@ -119,14 +122,14 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             
         else:
             # only sample every n-th frame
-            N = int(frames.size(0) / 32)
+            N = int(frames.size(0) / 8)
             frames = frames[::N]
 
         # T C H W -> C T H W.
         frames = frames.permute(1, 0, 2, 3)
 
         meta_data = {}
-        tensor_empty = torch.zeros([3, 32, 224, 224])
+        tensor_empty = torch.zeros([3, 8, 224, 224])
 
         if frames.shape == tensor_empty.shape:
             return frames, self._labels[index], index, meta_data
