@@ -1,7 +1,7 @@
 #!/bin/bash
 
 PROJECT_PATH="/home/reutemann/Dino-Video-Summarization-Transformer"
-EXP_NAME="le_test_original"
+EXP_NAME="le_adaptive_4x3x30_8x8_train_test"
 DATASET="kinetics400"
 DATA_PATH="/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
 CHECKPOINT="/home/reutemann/Dino-Video-Summarization-Transformer/checkpoints/model_k400_pretrained/kinetics400_vitb_ssl.pth"
@@ -12,11 +12,11 @@ if [ ! -d "checkpoints/$EXP_NAME" ]; then
   mkdir "checkpoints/$EXP_NAME"
 fi
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 python -m torch.distributed.launch \
   --nproc_per_node=1 \
   --master_port="$RANDOM" \
-  eval_linear_original.py \
+  eval_linear.py \
   --arch "vit_base" \
   --pretrained_weights "$CHECKPOINT" \
   --epochs 5 \
