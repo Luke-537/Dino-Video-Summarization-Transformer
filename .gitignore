@@ -8,6 +8,7 @@ kinetics_debug.py
 outdated_scripts
 /videos_sampled
 /Video-LLaVA
+/eval_logs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

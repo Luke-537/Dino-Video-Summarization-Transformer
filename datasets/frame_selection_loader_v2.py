@@ -1,9 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-import glob
 import os
-import random
-import warnings
-from PIL import Image
 import torch
 import torch.utils.data
 import torchvision
@@ -14,16 +9,9 @@ import kornia
 import json
 import numpy as np
 
-from datasets.transform import resize, uniform_crop, color_normalization
-from datasets.data_utils import get_random_sampling_rate, tensor_normalize, spatial_sampling, pack_pathway_output
-from datasets.decoder import decode
-from datasets.video_container import get_video_container
-from datasets.transform import VideoDataAugmentationDINO
-from einops import rearrange
+class FrameSelectionLoaderv2(torch.utils.data.Dataset):
 
-class FrameSelectionLoader(torch.utils.data.Dataset):
-
-    def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform", augmentations=True):
+    def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform", num_frames=16):
 
         self.cfg = cfg
         self.mode = mode
@@ -36,9 +24,9 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
 
-        self.crop_size = 224
+        self.num_frames = num_frames
 
-        self.augmentations = augmentations
+        self.crop_size = 224
 
         with open(loss_file, 'r') as file:
             self.loss_dict = json.load(file)
@@ -86,26 +74,15 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
     def __getitem__(self, index):
         video, audio, info = io.read_video(self._path_to_videos[index], pts_unit='sec')
         frames_unsampled = video.to(torch.float)
+        frames = frames_unsampled[::self.pre_sampling_rate].to(torch.uint8)
 
-        if self.augmentations:
-            frames_sampled = frames_unsampled[::self.pre_sampling_rate].to(torch.uint8)
-            frames = tensor_normalize(frames_sampled, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
+        # Number of frames to select
+        N = self.num_frames 
 
-            # T H W C -> T C H W.
-            frames = frames.permute(0, 3, 1, 2)
-            frames, _ = uniform_crop(frames, size=self.crop_size, spatial_idx=1) # adjust params
-        else:
-            frames = frames_unsampled[::self.pre_sampling_rate].to(torch.uint8)
-            #frames = frames / 255.0
-
-            # T H W C -> T C H W.
-            frames = frames.permute(0, 3, 1, 2)
-
-        N = 16  # Number of frames to select
+        file_name = os.path.basename(self._path_to_videos[index])
 
         if self.selection_method == "adaptive":   
-            # Get the file name and then the loss values
-            file_name = os.path.basename(self._path_to_videos[index])
+            # Get the raw file name and then the loss values
             key = os.path.splitext(file_name)[0]
             loss_list = self.loss_dict[key]
 
@@ -118,39 +95,24 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             # Create the CDF from the PDF
             cdf = np.cumsum(pdf)
 
-            selected_frames = []
             indices = []
             for i in range(N):
                 # Find the frame index corresponding to the quantile
                 j = i / N
                 cdf_array = np.asarray(cdf)
                 idx = (np.abs(cdf_array - j)).argmin()
-                selected_frames.append(frames[idx])
-                indices.append(idx)
-
-            frames = torch.stack(selected_frames)
+                indices.append(idx*self.pre_sampling_rate)
             
         else:
             # only sample every n-th frame
-            selected_frames = []
+            indices = []
             interval = int(frames.size(0) / N)
 
             for i in range(N):
-                selected_frames.append(frames[i*interval])
+                indices.append(i*interval*self.pre_sampling_rate)
 
-            frames = torch.stack(selected_frames)
-
-        # T C H W -> C T H W.
-        frames = frames.permute(1, 0, 2, 3)
-
-        meta_data = {}
-        tensor_empty = torch.zeros([3, N, 224, 224])
-
-        if frames.shape == tensor_empty.shape:
-            return frames, self._labels[index], index, meta_data
-        
-        else:
-            return tensor_empty, self._labels[index], index, meta_data
+        return indices, self._labels[index], file_name
+    
 
     def __len__(self):
 

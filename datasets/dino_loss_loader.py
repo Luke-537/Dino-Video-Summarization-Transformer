@@ -41,8 +41,8 @@ class DinoLossLoader(torch.utils.data.Dataset):
             self.dummy_list.append(torch.zeros(3, 60, self.crop_size, self.crop_size))
 
         path_to_file = os.path.join(
-            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
-            self.cfg.DATA.PATH_TO_DATA_DIR, "{}_3.csv".format(self.mode)
+            self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
+            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_3.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -87,7 +87,7 @@ class DinoLossLoader(torch.utils.data.Dataset):
         #breakpoint()
 
         # only sample every n-th frame
-        frames_sampled = frames_unsampled[::self.sampling_rate]
+        frames_sampled = frames_unsampled[::self.sampling_rate].to(torch.uint8)
 
         frames = tensor_normalize(frames_sampled, self.cfg.DATA.MEAN, self.cfg.DATA.STD)
 

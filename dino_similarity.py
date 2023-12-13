@@ -137,7 +137,7 @@ def dino_similarity(args, video_path):
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_values/loss_kinetics_test_3-4_3_30.json' 
+    file_path = 'loss_values/loss_kinetics_test_4_3_30_new.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

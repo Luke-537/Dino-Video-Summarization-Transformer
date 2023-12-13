@@ -15,13 +15,6 @@ import kornia
 import json
 import numpy as np
 from utils.parser import parse_args, load_config
-
-from datasets.transform import resize, uniform_crop, color_normalization
-from datasets.data_utils import get_random_sampling_rate, tensor_normalize, spatial_sampling, pack_pathway_output
-from datasets.decoder import decode
-from datasets.video_container import get_video_container
-from datasets.transform import VideoDataAugmentationDINO
-from einops import rearrange
 from testing.visualization import save_tensor_as_video
 
 
@@ -49,7 +42,7 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
         #breakpoint()
 
         #sharpening the values
-        loss_list = np.asarray(loss_list) ** 2
+        loss_list = np.asarray(loss_list) ** 3
 
         # Normalizing the loss values to create a PDF
         pdf = loss_list / np.sum(loss_list)
@@ -82,10 +75,10 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
 
 
 if __name__ == '__main__':
-    video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/B-Lsf7ZKf5c_10_25.avi"
+    video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/uVPnDJKt1M0_0_6.avi"
     loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_msvd_2_3_30.json"
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     cfg = load_config(args)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_3_a_3.mp4"
+    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_5_a.mp4"
     extract_video(cfg, video_path, loss_path, 2, "adaptive", out_path)
