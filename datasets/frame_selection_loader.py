@@ -23,7 +23,7 @@ from einops import rearrange
 
 class FrameSelectionLoader(torch.utils.data.Dataset):
 
-    def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform", augmentations=True):
+    def __init__(self, cfg, mode, loss_file, pre_sampling_rate, selection_method="uniform", num_frames=8, augmentations=True):
 
         self.cfg = cfg
         self.mode = mode
@@ -35,6 +35,8 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
         self._num_retries = 10
 
         self._num_clips = cfg.TEST.NUM_ENSEMBLE_VIEWS
+
+        self.num_frames = num_frames
 
         self.crop_size = 224
 
@@ -66,7 +68,8 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
                 )
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(
-                        os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
+                        #os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
+                        os.path.join("/graphics/scratch/datasets/MSVD/YouTubeClips", path)
                     )
                     self._labels.append(int(label))
                     self._spatial_temporal_idx.append(idx)
@@ -101,7 +104,7 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             # T H W C -> T C H W.
             frames = frames.permute(0, 3, 1, 2)
 
-        N = 16  # Number of frames to select
+        N = self.num_frames  # Number of frames to select
 
         if self.selection_method == "adaptive":   
             # Get the file name and then the loss values
@@ -144,13 +147,18 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
         frames = frames.permute(1, 0, 2, 3)
 
         meta_data = {}
-        tensor_empty = torch.zeros([3, N, 224, 224])
 
-        if frames.shape == tensor_empty.shape:
+        if self.augmentations:
+            tensor_empty = torch.zeros([3, N, 224, 224])
+            if frames.shape == tensor_empty.shape:
+                return frames, self._labels[index], index, meta_data
+            
+            else:
+                return tensor_empty, self._labels[index], index, meta_data
+            
+        else:
             return frames, self._labels[index], index, meta_data
         
-        else:
-            return tensor_empty, self._labels[index], index, meta_data
 
     def __len__(self):
 

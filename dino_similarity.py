@@ -105,6 +105,8 @@ def dino_similarity(args, video_path):
 
     for i, (views_list, file_name, video) in enumerate(test_loader):
 
+        #breakpoint()
+
         print(i+1, "/" ,len(test_loader))
 
         views = torch.squeeze(views_list, 0)
@@ -112,8 +114,6 @@ def dino_similarity(args, video_path):
         loss = []
         batch = 0
         for x in range(math.ceil(len(views)/args.batch_size_per_gpu)):
-
-            #breakpoint()
             
             batch_new = batch + args.batch_size_per_gpu
 
@@ -137,7 +137,7 @@ def dino_similarity(args, video_path):
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_values/loss_kinetics_test_4_3_30_new.json' 
+    file_path = 'loss_values_new/loss_msvd_4_3_30.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

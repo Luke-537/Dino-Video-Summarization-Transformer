@@ -94,6 +94,6 @@ def save_tensor_as_video(tensor, video_path):
 
 if __name__ == '__main__':
     sampling_rate = 4
-    loss_file_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_4_3_30.json"
-    plot_loss(loss_file_path, sampling_rate, "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_4_3_30.png", 0)
+    loss_file_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
+    plot_loss(loss_file_path, sampling_rate, "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.png", 2)
     

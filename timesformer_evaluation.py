@@ -42,7 +42,7 @@ dataset = FrameSelectionLoaderv2(
     mode="test",
     loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_4_3_30.json",
     pre_sampling_rate=4, 
-    selection_method="uniform",
+    selection_method="adaptive",
     num_frames=16
 )
 print(f"Loaded dataset of length: {len(dataset)}")
@@ -50,13 +50,14 @@ print(f"Loaded dataset of length: {len(dataset)}")
 
 
 processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400")
-model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
+model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400") # finetune 1-2 epoch
 model.cuda()
 
-logging.basicConfig(filename='eval_logs/k400_uniform_1.log', level=logging.INFO)
+logging.basicConfig(filename='eval_logs/k400_adaptive_2.log', level=logging.INFO)
 
 total_pred = 0
 correct_pred = 0
+error_idx = []
 
 for i in range(len(dataset)):
 
@@ -68,6 +69,8 @@ for i in range(len(dataset)):
     video = read_video_pyav(container, dataset[i][0])
 
     if video.shape[0] != 16:
+        error_idx.append(i)
+        breakpoint()
         continue
 
     # prepare video for the model
@@ -85,5 +88,6 @@ for i in range(len(dataset)):
         correct_pred = correct_pred + 1
     total_pred = total_pred + 1
 
-    if i % 250 == 0:
-        logging.info(f"Sample {i} Accuracy: {correct_pred / total_pred * 100}%")
+    if i % 250 == 0: 
+        logging.info(f"Sample {i}   Accuracy: {correct_pred / total_pred * 100}%   Correct Predictions: {correct_pred}   Total Predictions: {total_pred}")
+    

@@ -54,7 +54,8 @@ class FrameSelectionLoaderv2(torch.utils.data.Dataset):
                 )
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(
-                        os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
+                        #os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
+                        os.path.join("/graphics/scratch/datasets/MSVD/YouTubeClips", path)
                     )
                     self._labels.append(int(label))
                     self._spatial_temporal_idx.append(idx)
