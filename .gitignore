@@ -8,8 +8,8 @@ kinetics_debug.py
 outdated_scripts
 /eval_logs
 /timesformer_finetuning
-/loss_values
-/loss_values_new
+/loss_values/loss_values_old
+/loss_values_new/loss_values_old
 Video-LLaVA/models--LanguageBind--Video-LLaVA-7B
 Video-LLaVA/cache_dir
 
