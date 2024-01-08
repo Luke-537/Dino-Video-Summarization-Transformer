@@ -9,6 +9,7 @@ outdated_scripts
 /eval_logs
 /timesformer_finetuning
 /loss_values
+/loss_values_new
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
