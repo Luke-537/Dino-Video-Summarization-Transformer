@@ -29,7 +29,7 @@ from torch import nn
 from tqdm import tqdm
 from torchvision.transforms import functional as tf
 
-from datasets import UCF101, HMDB51, Kinetics, DinoLossLoader
+from datasets_custom import UCF101, HMDB51, Kinetics, DinoLossLoader
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D
 from utils import utils
 from utils.meters import TestMeter
@@ -82,7 +82,7 @@ def dino_similarity(args, video_path):
     # load test dataset
     dataset_test = DinoLossLoader(
         cfg=config,
-        mode="test",
+        mode="train",
         local_clip_size=local_clip_size, 
         global_clip_size=global_clip_size,
         sampling_rate=sampling_rate
@@ -137,7 +137,7 @@ def dino_similarity(args, video_path):
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_values_new/loss_msvd_4_3_30.json' 
+    file_path = 'loss_values_new/loss_kinetics_train-3_4_3_30.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 

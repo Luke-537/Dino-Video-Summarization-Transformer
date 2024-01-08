@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification, AutoImageProcessor, TimesformerForVideoClassification
 from utils.parser import parse_args, load_config
-from datasets import FrameSelectionLoaderv2
+from datasets_custom import FrameSelectionLoaderv2
 import logging
 
 
@@ -39,8 +39,7 @@ config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-datase
 
 dataset = FrameSelectionLoaderv2(
     cfg=config,
-    mode="test",
-    loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_test_4_3_30.json",
+    loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json",
     pre_sampling_rate=4, 
     selection_method="adaptive",
     num_frames=16
@@ -50,28 +49,26 @@ print(f"Loaded dataset of length: {len(dataset)}")
 
 
 processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400")
-model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400") # finetune 1-2 epoch
+model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning") # finetune 1-2 epoch
 model.cuda()
 
-logging.basicConfig(filename='eval_logs/k400_adaptive_2.log', level=logging.INFO)
+logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned.log', level=logging.INFO)
 
 total_pred = 0
 correct_pred = 0
-error_idx = []
 
 for i in range(len(dataset)):
-
     if i % 10 == 0 and i != 0:
         print(str(i) + "/" + str(len(dataset)) + "   ")
         print("Accuracy: " + str(correct_pred / total_pred * 100) + "%")
 
-    container = av.open("/graphics/scratch2/students/reutemann/kinetics-dataset/k400/test/" + dataset[i][2])
+    container = av.open("/graphics/scratch2/students/reutemann/kinetics-dataset/k400/test/" + dataset[i][2]) #maybe try resized
     video = read_video_pyav(container, dataset[i][0])
 
     if video.shape[0] != 16:
-        error_idx.append(i)
-        breakpoint()
-        continue
+        padding_value = 16 - video.shape[0]
+        padding = ((padding_value, 0), (0, 0), (0, 0), (0, 0))
+        video = np.pad(video, pad_width=padding, mode='constant', constant_values=0)
 
     # prepare video for the model
     inputs = processor(list(video), return_tensors="pt")
@@ -90,4 +87,5 @@ for i in range(len(dataset)):
 
     if i % 250 == 0: 
         logging.info(f"Sample {i}   Accuracy: {correct_pred / total_pred * 100}%   Correct Predictions: {correct_pred}   Total Predictions: {total_pred}")
-    
+
+logging.info(f"Sample {i}   Accuracy: {correct_pred / total_pred * 100}%   Correct Predictions: {correct_pred}   Total Predictions: {total_pred}")

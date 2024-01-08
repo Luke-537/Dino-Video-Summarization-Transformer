@@ -6,9 +6,9 @@ checkpoints
 test_data
 kinetics_debug.py
 outdated_scripts
-/videos_sampled
-/Video-LLaVA
 /eval_logs
+/timesformer_finetuning
+/loss_values
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -35,8 +35,8 @@ import vision_transformer as vits
 from vision_transformer import DINOHead, MultiDINOHead
 from torchvision.utils import save_image
 
-from datasets import Kinetics, KineticsFinetune
-from datasets.rand_conv import RandConv
+from datasets_custom import Kinetics, KineticsFinetune
+from datasets_custom.rand_conv import RandConv
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D, S3D
 from utils.parser import load_config
 from eval_knn import extract_features, knn_classifier, UCFReturnIndexDataset, HMDBReturnIndexDataset

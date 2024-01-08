@@ -20,7 +20,7 @@ from pathlib import Path
 from torch import nn
 from tqdm import tqdm
 
-from datasets import UCF101, HMDB51, Kinetics, FrameSelectionLoader
+from datasets_custom import UCF101, HMDB51, Kinetics, FrameSelectionLoader
 from models import get_vit_base_patch16_224, get_aux_token_vit, SwinTransformer3D
 from utils import utils
 from utils.meters import TestMeter

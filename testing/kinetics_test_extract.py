@@ -16,8 +16,8 @@ def extract_entries(input_file, output_file):
     # Process the data
     processed_data = []
     for key, values in data.items():
-        if len(values) > 10:
-            values = random.sample(values, 10)  # Randomly select 10 items if more than 10 are present
+        if len(values) > 25:
+            values = random.sample(values, 25)  # Randomly select 10 items if more than 10 are present
         processed_data.extend(values)
 
     # Write the output CSV file
@@ -28,6 +28,6 @@ def extract_entries(input_file, output_file):
 
 if __name__ == '__main__':
     extract_entries(
-        '/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations/test.csv', 
-        '/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations/test_small.csv'
+        '/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations/val.csv', 
+        '/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations/val_small.csv'
     )
