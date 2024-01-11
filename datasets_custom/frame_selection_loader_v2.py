@@ -87,8 +87,8 @@ class FrameSelectionLoaderv2(torch.utils.data.Dataset):
             loss_list = self.loss_dict[key]
 
             #sharpening the values
-            #loss_list = np.asarray(loss_list) ** 2
-            loss_list = np.asarray(loss_list)
+            loss_list = np.asarray(loss_list) ** 2
+            #loss_list = np.asarray(loss_list)
 
             # min-max normalization
             pdf = (loss_list - loss_list.min()) / (loss_list.max() - loss_list.min())

@@ -33,24 +33,31 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
     frames = frames_sampled.permute(0, 3, 1, 2)
     #frames, _ = uniform_crop(frames, size=224, spatial_idx=1) # adjust params
 
+    N = 8  # Number of frames to select
+
+    file_name = os.path.basename(video_path)
+
     if selection_method == "adaptive":   
         # Get the file name and then the loss values
-        file_name = os.path.basename(video_path)
         key = os.path.splitext(file_name)[0]
         loss_list = loss_dict[key]
 
-        #breakpoint()
-
         #sharpening the values
-        loss_list = np.asarray(loss_list) ** 3
+        #loss_list = np.asarray(loss_list) ** 2
+        loss_list = np.asarray(loss_list)
 
-        # Normalizing the loss values to create a PDF
+        if len(loss_list) > frames.size(0):
+            loss_list = loss_list[:frames.size(0)]
+
+        # min-max normalization
+        pdf = (loss_list - loss_list.min()) / (loss_list.max() - loss_list.min())
+
+        # Normalizing the loss values to create a PDF, might need to scale
         pdf = loss_list / np.sum(loss_list)
 
         # Create the CDF from the PDF
         cdf = np.cumsum(pdf)
 
-        N = 32  # Number of frames to select
         selected_frames = []
         indices = []
         for i in range(N):
@@ -59,14 +66,19 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
             cdf_array = np.asarray(cdf)
             idx = (np.abs(cdf_array - j)).argmin()
             selected_frames.append(frames[idx])
-            indices.append(idx)
+            indices.append(idx*pre_sampling_rate)
 
         frames = torch.stack(selected_frames)
         
     else:
         # only sample every n-th frame
-        N = int(frames.size(0) / 32)
-        frames = frames[::N]
+        selected_frames = []
+        interval = int(frames.size(0) / N)
+
+        for i in range(N):
+            selected_frames.append(frames[i*interval])
+
+        frames = torch.stack(selected_frames)
 
     # T C H W -> C T H W.
     frames = frames.permute(1, 0, 2, 3)
@@ -75,10 +87,14 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
 
 
 if __name__ == '__main__':
-    video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/uVPnDJKt1M0_0_6.avi"
-    loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_msvd_2_3_30.json"
+    video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/YLSxF9flpj4_000009_000019.mp4"
+    loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     cfg = load_config(args)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_5_a.mp4"
-    extract_video(cfg, video_path, loss_path, 2, "adaptive", out_path)
+    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/YLSxF9flpj4_000009_000019_u.mp4"
+    extract_video(cfg, video_path, loss_path, 4, "uniform", out_path)
+    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/YLSxF9flpj4_000009_000019_a.mp4"
+    extract_video(cfg, video_path, loss_path, 4, "adaptive", out_path)
+
+    #save as frames directly, mabe sharpen for clearness, stitch together in powerpoint

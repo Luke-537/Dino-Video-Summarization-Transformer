@@ -52,7 +52,7 @@ processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetu
 model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning") # finetune 1-2 epoch
 model.cuda()
 
-logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned.log', level=logging.INFO)
+logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned_sharp.log', level=logging.INFO)
 
 total_pred = 0
 correct_pred = 0

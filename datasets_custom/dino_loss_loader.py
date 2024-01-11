@@ -39,7 +39,7 @@ class DinoLossLoader(torch.utils.data.Dataset):
 
         path_to_file = os.path.join(
             #self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
-            self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small_3.csv".format(self.mode)
+            self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -124,6 +124,7 @@ class DinoLossLoader(torch.utils.data.Dataset):
             self.global_clip_size,
         ) 
 
+        # return an empty tensor if there is a size mismatch, resulting in constant loss values
         if size_match(views_list):
 
             return views_list, self._path_to_videos[index], frames_sampled.permute(3, 0, 1, 2)

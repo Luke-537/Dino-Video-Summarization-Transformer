@@ -2,10 +2,8 @@ import evaluate
 
 captions_dict = {}
 
-predictions = ["hello there general kenobi", "foo bar foobar"]
-
 # Read the file line by line
-with open("/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive.csv", 'r') as file:
+with open("/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive_old.csv", 'r') as file:
     for line in file:
         # Split each line by space and remove the last element if it is '</s>'
         parts = line.strip().split(' ')
@@ -44,8 +42,6 @@ print(keys_match_in_order)
 
 predictions = list(captions_ordered.values())
 references = list(truth_ordered.values())
-
-breakpoint()
 
 bleu = evaluate.load("bleu")
 results = bleu.compute(predictions=predictions, references=references)

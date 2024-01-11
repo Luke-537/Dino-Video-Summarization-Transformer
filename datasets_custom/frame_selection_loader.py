@@ -23,9 +23,10 @@ from einops import rearrange
 
 class FrameSelectionLoader(torch.utils.data.Dataset):
 
-    def __init__(self, cfg, loss_file, pre_sampling_rate, selection_method="uniform", num_frames=8, augmentations=False, return_dict=False):
+    def __init__(self, cfg, loss_file, pre_sampling_rate, selection_method="uniform", num_frames=8, augmentations=False, return_dict=False, mode="test"):
 
         self.cfg = cfg
+        self.mode = mode
 
         self.pre_sampling_rate = pre_sampling_rate
         self.selection_method = selection_method
@@ -47,8 +48,8 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             self.loss_dict = json.load(file)
 
         path_to_file = os.path.join(
-            self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format("test")
-            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small.csv".format("test")
+            #self.cfg.DATA.PATH_TO_DATA_DIR, "{}.csv".format(self.mode)
+            self.cfg.DATA.PATH_TO_DATA_DIR, "{}_small.csv".format(self.mode)
         )
         assert os.path.exists(path_to_file), "{} dir not found".format(
             path_to_file
@@ -69,8 +70,8 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
                 )
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(
-                        #os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test", path)
-                        os.path.join("/graphics/scratch/datasets/MSVD/YouTubeClips", path)
+                        os.path.join("/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized", mode,  path)
+                        #os.path.join("/graphics/scratch/datasets/MSVD/YouTubeClips", path)
                     )
                     self._labels.append(int(label))
                     self._spatial_temporal_idx.append(idx)
@@ -115,7 +116,7 @@ class FrameSelectionLoader(torch.utils.data.Dataset):
             loss_list = self.loss_dict[key]
 
             #sharpening the values
-            #loss_list = np.asarray(loss_list) ** 2 # remove
+            #loss_list = np.asarray(loss_list) ** 2
             loss_list = np.asarray(loss_list)
 
             if len(loss_list) > frames.size(0):

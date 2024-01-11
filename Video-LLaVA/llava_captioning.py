@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 import sys
 sys.path.append('/home/reutemann/Dino-Video-Summarization-Transformer')
 import torch
@@ -16,8 +16,7 @@ import csv
 def main():
     disable_torch_init()
     video = '/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_5_u.mp4'
-    #inp = 'Give me a single-sentence caption for this video.' # describe me this video
-    inp = 'Give me a single-sentence description of the elements seen in this video'
+    inp = 'Give me a single-sentence caption for this video.' # describe me this video
     model_path = 'LanguageBind/Video-LLaVA-7B'
     device = 'cuda'
     load_4bit, load_8bit = True, False

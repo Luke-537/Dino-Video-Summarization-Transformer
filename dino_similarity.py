@@ -82,7 +82,7 @@ def dino_similarity(args, video_path):
     # load test dataset
     dataset_test = DinoLossLoader(
         cfg=config,
-        mode="train",
+        mode="val",
         local_clip_size=local_clip_size, 
         global_clip_size=global_clip_size,
         sampling_rate=sampling_rate
@@ -125,7 +125,7 @@ def dino_similarity(args, video_path):
 
             with torch.no_grad():
                 student_output = student(local_views)
-                teacher_output = teacher(global_views)
+                teacher_output = student(global_views)
 
             for y in range(len(student_output)):
                 loss.append(dino_loss.forward(student_output[y], teacher_output[y]).item())
@@ -137,7 +137,7 @@ def dino_similarity(args, video_path):
 
 
 def export_loss(loss_list, video_path):
-    file_path = 'loss_values_new/loss_kinetics_train-3_4_3_30.json' 
+    file_path = 'loss_values_new/loss_kinetics_val_4_3_30.json' 
     video_name = os.path.basename(video_path)
     video_name_without_extension, extension = os.path.splitext(video_name)
 
