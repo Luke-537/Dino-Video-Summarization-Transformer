@@ -1,6 +1,6 @@
 from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification, AutoImageProcessor, TimesformerForVideoClassification
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import torch
 from transformers import Trainer, TrainingArguments
 from datasets_custom import FrameSelectionLoader
@@ -47,15 +47,16 @@ dataset_val = FrameSelectionLoader(
 
 # Define training arguments
 training_args = TrainingArguments(
-    output_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_test/results",
-    num_train_epochs=1,
+    output_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_5/results",
+    num_train_epochs=5,
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
     warmup_steps=500,
     weight_decay=0.01,
-    logging_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_test/logs",
-    logging_steps=100,
-    evaluation_strategy="epoch",
+    logging_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_5/logs",
+    logging_steps=250,
+    evaluation_strategy="steps",
+    eval_steps = 5000
 )
 
 # Initialize Trainer
@@ -70,7 +71,7 @@ trainer = Trainer(
 trainer.train()
 
 # Save the model
-model.save_pretrained("/home/reutemann/Dino-Video-Summarization-Transformer/timesformer_finetuning_new")
+model.save_pretrained("/home/reutemann/Dino-Video-Summarization-Transformer/timesformer_finetuning_5")
 
 #breakpoint()
 
@@ -89,9 +90,9 @@ plt.ylabel('Loss')
 plt.title('Training vs Validation Loss')
 plt.legend()
 
-with open('eval_logs/training_log_history.json', 'w') as file:
+with open('eval_logs/training_log_history_5.json', 'w') as file:
     json.dump(log_history, file)
 
 # Save the plot
-plt.savefig('eval_logs/finetuning_loss.png')  # Saves the plot as a PNG file
+plt.savefig('eval_logs/finetuning_loss_5.png')  # Saves the plot as a PNG file
 

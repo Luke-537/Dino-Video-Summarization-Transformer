@@ -15,10 +15,11 @@ import kornia
 import json
 import numpy as np
 from utils.parser import parse_args, load_config
-from testing.visualization import save_tensor_as_video
+from testing.visualization import save_tensor_as_video, plot_loss
+from torchvision.utils import save_image
 
 
-def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_method, out_path):
+def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_method, out_path, save_frames=False):
 
     video, audio, info = io.read_video(video_path, pts_unit='sec')
     frames_unsampled = video.to(torch.float)
@@ -79,22 +80,34 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
             selected_frames.append(frames[i*interval])
 
         frames = torch.stack(selected_frames)
+        indices = None
 
     # T C H W -> C T H W.
     frames = frames.permute(1, 0, 2, 3)
     
     save_tensor_as_video(frames, out_path)
 
+    if save_frames:
+        key = os.path.splitext(file_name)[0]
+        frames = frames.permute(1, 0, 2, 3) / 255
+        for i in range(len(frames)):
+            path = 'videos_sampled/'+ str(key) + '/' + str(i) + '.png'
+            save_image(frames[:][i], path)
+
+    return indices
 
 if __name__ == '__main__':
-    video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/YLSxF9flpj4_000009_000019.mp4"
-    loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
+    key = "-_hbPLsZvvo_172_179"
+    video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/" + key + ".avi"
+    #video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/" + key + ".mp4"
+    loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
+    #loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     cfg = load_config(args)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/YLSxF9flpj4_000009_000019_u.mp4"
-    extract_video(cfg, video_path, loss_path, 4, "uniform", out_path)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/YLSxF9flpj4_000009_000019_a.mp4"
-    extract_video(cfg, video_path, loss_path, 4, "adaptive", out_path)
+    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + "_u.mp4"
+    _ = extract_video(cfg, video_path, loss_path, 4, "uniform", out_path, save_frames=True)
+    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + "_a.mp4"
+    indices = extract_video(cfg, video_path, loss_path, 4, "adaptive", out_path)
 
-    #save as frames directly, mabe sharpen for clearness, stitch together in powerpoint
+    plot_loss(loss_path, 4, "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + ".png", key=key, selected_frames=indices)

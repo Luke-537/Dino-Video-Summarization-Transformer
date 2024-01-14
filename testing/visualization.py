@@ -5,7 +5,7 @@ import torchvision.io as io
 import os
 import torch
 
-def plot_loss(loss_file_path, sampling_rate, plot_path, key=None):
+def plot_loss(loss_file_path, sampling_rate, plot_path, key=None, selected_frames=None):
     # Load precomputed loss values
     with open(loss_file_path, 'r') as file:
         loss_dict = json.load(file)
@@ -24,7 +24,14 @@ def plot_loss(loss_file_path, sampling_rate, plot_path, key=None):
     fig, ax = plt.subplots(figsize=(15, 6))
 
     # Create a bar chart
-    ax.bar(frame_numbers*sampling_rate, loss_values, label='Loss', color='blue', width=2.5)
+    ax.plot(frame_numbers*sampling_rate, loss_values, label='Loss', color='steelblue', linewidth=2.5)
+
+    #selected_frames = [0, 56, 104, 156, 192, 212, 232, 256]
+
+    if selected_frames is not None:
+        selected_loss_values = [loss_values[int(i/sampling_rate)] for i in selected_frames]
+        ax.scatter(selected_frames, selected_loss_values, label='Selected Frames', color='crimson', zorder=5, s=70)
+
 
     # Set labels and title
     ax.set_xlabel('Frame Number')

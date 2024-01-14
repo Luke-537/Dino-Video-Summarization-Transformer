@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import av
 import numpy as np
 import torch
@@ -49,10 +49,10 @@ print(f"Loaded dataset of length: {len(dataset)}")
 
 
 processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400")
-model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning") # finetune 1-2 epoch
+model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning_new") # finetune 1-2 epoch
 model.cuda()
 
-logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned_sharp.log', level=logging.INFO)
+logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned_new.log', level=logging.INFO)
 
 total_pred = 0
 correct_pred = 0

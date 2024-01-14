@@ -12,8 +12,10 @@ outdated_scripts
 /loss_values_new/loss_values_old
 Video-LLaVA/models--LanguageBind--Video-LLaVA-7B
 Video-LLaVA/cache_dir
-/timesformer_finetuning_new
+/timesformer_finetuning_test
 /videos_sampled
+/timesformer_finetuning_test_new
+/timesformer_finetuning_5
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
