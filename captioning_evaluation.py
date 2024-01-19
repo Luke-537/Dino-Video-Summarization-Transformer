@@ -25,6 +25,8 @@ def main(selection_method="adaptive"):
     sorted_keys = sorted(captions_dict.keys())
     captions_ordered = {key: captions_dict[key] for key in sorted_keys}
 
+    captions_ordered = {"giLxPCgLLqg_9_19" : captions_ordered["giLxPCgLLqg_9_19"]}
+
     truth_dict = {}
 
     with open("/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/annotations.csv", 'r') as file:
@@ -42,6 +44,8 @@ def main(selection_method="adaptive"):
 
     sorted_keys = sorted(truth_dict.keys())
     truth_ordered = {key: truth_dict[key] for key in sorted_keys}
+
+    truth_ordered = {"giLxPCgLLqg_9_19" : truth_ordered["giLxPCgLLqg_9_19"]}
 
     keys_match_in_order = list(captions_ordered.keys()) == list(truth_ordered.keys())
 
@@ -62,12 +66,12 @@ def main(selection_method="adaptive"):
     predictions = []
     references = []
 
-    for i in range(len(test_set)):
-        predictions.append(captions_ordered[test_set[i]][0])
-        references.append(truth_ordered[test_set[i]])
+    #for i in range(len(test_set)):
+    #    predictions.append(captions_ordered[test_set[i]][0])
+    #    references.append(truth_ordered[test_set[i]])
 
-    #predictions = list(captions_ordered.values())
-    #references = list(truth_ordered.values())
+    predictions.append(captions_ordered["giLxPCgLLqg_9_19"][0])
+    references.append(truth_ordered["giLxPCgLLqg_9_19"])
     
     # calculate BERT score
     bert = evaluate.load("bertscore")

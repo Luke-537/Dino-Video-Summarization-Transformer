@@ -1,11 +1,11 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import av
 import numpy as np
 import torch
 from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification, AutoImageProcessor, TimesformerForVideoClassification
 from utils.parser import parse_args, load_config
-from datasets_custom import FrameSelectionLoaderv2
+from datasets_custom import FrameSelectionLoader
 import logging
 
 
@@ -34,25 +34,28 @@ args = parse_args()
 args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
 config = load_config(args)
 config.DATA.PATH_TO_DATA_DIR = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
-config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test"
+config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
+config.DATASET = "Kinetics"
+config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
 
-
-dataset = FrameSelectionLoaderv2(
+dataset = FrameSelectionLoader(
     cfg=config,
-    loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json",
     pre_sampling_rate=4, 
     selection_method="adaptive",
-    num_frames=16
+    num_frames=16,
+    augmentations=False,
+    return_type="Indices",
+    mode="test"
 )
 print(f"Loaded dataset of length: {len(dataset)}")
 #dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=16)
 
 
 processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400")
-model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning_new") # finetune 1-2 epoch
+model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning_test_2")
 model.cuda()
 
-logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned_new.log', level=logging.INFO)
+logging.basicConfig(filename='eval_logs/k400_adaptive_finetuned_test_2.log', level=logging.INFO)
 
 total_pred = 0
 correct_pred = 0

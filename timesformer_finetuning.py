@@ -10,7 +10,7 @@ import json
 
 # Load pre-trained model
 processor = AutoImageProcessor.from_pretrained("facebook/timesformer-base-finetuned-k400")
-model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400", ignore_mismatched_sizes=True) # finetune 1-2 epoch
+model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning", ignore_mismatched_sizes=True)
 model.cuda()
 
 # Ensuring model uses CUDA if available
@@ -21,49 +21,50 @@ args = parse_args()
 args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
 config = load_config(args)
 config.DATA.PATH_TO_DATA_DIR = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
-#config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test"
+config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
+config.DATASET = "Kinetics"
+config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_train_4_3_30.json"
 
 dataset_train = FrameSelectionLoader(
     cfg=config,
-    loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_train_4_3_30.json",
     pre_sampling_rate=4,
     selection_method="adaptive",
     num_frames=16,
     augmentations=True,
-    return_dict = True,
+    return_type="Dict",
     mode = "train"
 )
 
+config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_val_4_3_30.json"
+
 dataset_val = FrameSelectionLoader(
     cfg=config,
-    loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_val_4_3_30.json",
     pre_sampling_rate=4,
     selection_method="adaptive",
     num_frames=16,
-    augmentations=True,
-    return_dict = True,
+    augmentations=False,
+    return_type="Dict",
     mode = "val"
 )
 
 # Define training arguments
 training_args = TrainingArguments(
-    output_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_5/results",
+    output_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_test_3",
     num_train_epochs=5,
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
     warmup_steps=500,
     weight_decay=0.01,
-    logging_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_5/logs",
-    logging_steps=250,
-    evaluation_strategy="steps",
-    eval_steps = 5000
+    logging_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning_test_3/logs",
+    logging_steps=500,
+    evaluation_strategy="epoch",
 )
 
 # Initialize Trainer
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=dataset_train,  # Your custom dataset
+    train_dataset=dataset_train,
     eval_dataset=dataset_val
 )
 
@@ -71,9 +72,7 @@ trainer = Trainer(
 trainer.train()
 
 # Save the model
-model.save_pretrained("/home/reutemann/Dino-Video-Summarization-Transformer/timesformer_finetuning_5")
-
-#breakpoint()
+model.save_pretrained("/home/reutemann/Dino-Video-Summarization-Transformer/timesformer_finetuning_test_3")
 
 # Assume 'trainer' is your Hugging Face Trainer object after training
 log_history = trainer.state.log_history
@@ -90,9 +89,8 @@ plt.ylabel('Loss')
 plt.title('Training vs Validation Loss')
 plt.legend()
 
-with open('eval_logs/training_log_history_5.json', 'w') as file:
+with open('eval_logs/training_log_history_5a.json', 'w') as file:
     json.dump(log_history, file)
 
 # Save the plot
-plt.savefig('eval_logs/finetuning_loss_5.png')  # Saves the plot as a PNG file
-
+plt.savefig('eval_logs/finetuning_loss_5a.png')  # Saves the plot as a PNG file

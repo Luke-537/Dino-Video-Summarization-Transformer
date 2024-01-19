@@ -97,17 +97,27 @@ def extract_video(cfg, video_path, loss_path, pre_sampling_rate, selection_metho
     return indices
 
 if __name__ == '__main__':
-    key = "-_hbPLsZvvo_172_179"
-    video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/" + key + ".avi"
-    #video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/" + key + ".mp4"
-    loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
-    #loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
+    key = "giLxPCgLLqg_9_19"
+    dataset = "MSVD"
+    #dataset = "Kinetics"
+
+    dir_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+
+    if dataset == "MSVD":
+        video_path = "/graphics/scratch/datasets/MSVD/YouTubeClips/" + key + ".avi"
+        loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
+    else:
+        loss_path = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_test_4_3_30.json"
+        video_path = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/test/" + key + ".mp4"
+
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     cfg = load_config(args)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + "_u.mp4"
-    _ = extract_video(cfg, video_path, loss_path, 4, "uniform", out_path, save_frames=True)
-    out_path = "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + "_a.mp4"
-    indices = extract_video(cfg, video_path, loss_path, 4, "adaptive", out_path)
+    out_path = dir_path + "/" + key + "_u.mp4"
+    _ = extract_video(cfg, video_path, loss_path, 4, "uniform", out_path, save_frames=False)
+    out_path = dir_path + "/" + key + "_a.mp4"
+    indices = extract_video(cfg, video_path, loss_path, 4, "adaptive", out_path, save_frames=True)
 
-    plot_loss(loss_path, 4, "/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/" + key + "/" + key + ".png", key=key, selected_frames=indices)
+    plot_loss(loss_path, 4, dir_path + "/" + key + ".png", key=key, selected_frames=indices)

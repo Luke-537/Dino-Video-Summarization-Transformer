@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import sys
 sys.path.append('/home/reutemann/Dino-Video-Summarization-Transformer')
 import torch
@@ -15,14 +15,14 @@ import csv
 
 def main():
     disable_torch_init()
-    video = '/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_5_u.mp4'
-    inp = 'Give me a single-sentence caption for this video.' # describe me this video
+    #video = '/home/reutemann/Dino-Video-Summarization-Transformer/videos_sampled/video_5_u.mp4'
+    #inp = 'Give me a single-sentence caption for this video.'
+    inp = 'Give me a single-sentence caption for the contents of this video.'
     model_path = 'LanguageBind/Video-LLaVA-7B'
     device = 'cuda'
     load_4bit, load_8bit = True, False
     model_name = get_model_name_from_path(model_path)
     tokenizer, model, processor, context_len = load_pretrained_model(model_path, None, model_name, load_8bit, load_4bit, device=device)
-    video_processor = processor['video']
     image_processor = processor['image']
     conv_mode = "llava_v1"
     conv = conv_templates[conv_mode].copy()
@@ -33,10 +33,11 @@ def main():
     config = load_config(args)
     config.DATA.PATH_TO_DATA_DIR = "/home/reutemann/Dino-Video-Summarization-Transformer/MSVD"
     config.DATA.PATH_PREFIX = "/graphics/scratch/datasets/MSVD/YouTubeClips"
+    config.DATASET = "MSVD"
+    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
 
     dataset = FrameSelectionLoader(
         cfg=config,
-        loss_file="/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json",
         pre_sampling_rate=4,
         selection_method="adaptive",
         num_frames=8,
@@ -44,7 +45,7 @@ def main():
     )
     print(f"Loaded dataset of length: {len(dataset)}")
 
-    export_file = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive_sharpening.csv"
+    export_file = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive_test_2.csv"
 
     key = ['video']
 
