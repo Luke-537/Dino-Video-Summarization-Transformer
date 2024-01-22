@@ -6,6 +6,10 @@ from datasets_custom import FrameSelectionLoader
 
 
 def debug_dataloader():
+    """
+    Debugging script for the data loader.
+    """
+        
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     config = load_config(args)

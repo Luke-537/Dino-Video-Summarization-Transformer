@@ -2,7 +2,12 @@ import json
 
 
 def merge_json(path_1, path_2, path_new):
+    """
+    Merges two JSON files.
 
+    path_1, path_2 (String): paths to the files that need to be merged.
+    path_new (String): pathto the newly merged file.
+    """
     with open(path_1, 'r') as file:
         dict1 = json.load(file)
 

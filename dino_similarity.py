@@ -13,23 +13,33 @@ from utils import utils
 from utils.parser import load_config
 
 
-def dino_similarity(args, local_clip_size, global_clip_size, sampling_rate, file_path):
-    cudnn.benchmark = True
-    
-    config = load_config(args)
+def dino_similarity(cfg, local_clip_size, global_clip_size, sampling_rate, file_path):
+    """
+    Calculates the similarity values using DINO loss in combination with a pre-trained SVT
+    for each frame of each video of the Kinetics or MSVD dataset. 
 
-    # Load the pretrained checkpoint
-    ckpt = torch.load(args.pretrained_weights)
+    cfg (CfgNode): configs.
+    local_clip_size (int): size of the local views.
+    global_clip_size (int): size of the global views.
+    sampling_rate (int): pre-sampling rate to downsample the video.
+    file_path (String): path to export loss.
+    """
+
+    cudnn.benchmark = True
+    config = load_config(cfg)
+
+    # load the pretrained checkpoint
+    ckpt = torch.load(cfg.pretrained_weights)
     renamed_checkpoint = {x[len("backbone."):]: y for x, y in ckpt.items() if x.startswith("backbone.")}
 
-    # Load teacher and student model class, the corresponding state dict and switch to eval mode
+    # load model class, state dict, switch to eval mode and move to cuda
     model = get_vit_base_patch16_224(cfg=config, no_head=False)
     model.load_state_dict(renamed_checkpoint, strict=False)
 
     model= model.eval()
     model = model.cuda()
     
-    # load test dataset
+    # load dataset containing local and global views
     dataset_test = DinoLossLoader(
         cfg=config,
         mode="test",
@@ -38,46 +48,54 @@ def dino_similarity(args, local_clip_size, global_clip_size, sampling_rate, file
         sampling_rate=sampling_rate
     )
 
+    # initialising the dataloader
     test_loader = torch.utils.data.DataLoader(
         dataset_test,
-        num_workers=args.num_workers,
+        num_workers=cfg.num_workers,
         pin_memory=True,
     )
 
-    # Instantiate dino loss
+    # instantiate dino loss with temperature parameters, move to cuda
     dino_loss = DINOLoss(
         out_dim=768,
         teacher_temp=0.02,
         student_temp=0.3,
     ).cuda()
 
+    # iterating over the dataloader
     for i, (views_list, file_name, video) in enumerate(test_loader):
         print(i+1, "/" ,len(test_loader))
         views = torch.squeeze(views_list, 0)
         loss = []
         batch = 0
 
-        for j in range(math.ceil(len(views)/args.batch_size_per_gpu)):
+        # iterating over each frame
+        for j in range(math.ceil(len(views)/cfg.batch_size_per_gpu)):
             
-            batch_new = batch + args.batch_size_per_gpu
+            batch_new = batch + cfg.batch_size_per_gpu
 
+            # batching up the views
             local_views = views[batch:batch_new][::2, :, :local_clip_size, :, :].cuda(non_blocking=True)
             global_views = views[batch:batch_new][1::2].cuda(non_blocking=True)
 
+            # computing the model output
             with torch.no_grad():
                 student_output = model(local_views)
                 teacher_output = model(global_views)
 
+            # calculating the dino loss for each frame
             for k in range(len(student_output)):
                 loss.append(dino_loss.forward(student_output[k], teacher_output[k]).item())
 
             batch = batch_new
 
+        # exporting the loss
         export_loss(loss, file_name[0], file_path)
         
 
 
-def export_loss(loss_list, video_path, file_path): 
+def export_loss(loss_list, video_path, file_path):
+    # exporting the loss values as a JSON file
     video_name = os.path.basename(video_path)
     video_name_without_extension, _ = os.path.splitext(video_name)
 
@@ -99,10 +117,8 @@ def export_loss(loss_list, video_path, file_path):
             json.dump(video_dict, file)
 
 
-# DINO Loss that only takes a 1-dimensional tensor as an input for student_output and teacher_output 
-# before it needed at least 2 local views
-# also removed the check if model is two token for readability
 class DINOLoss(nn.Module):
+    # calculates the DINO loss for two output tensors and returns a single value
     def __init__(self, out_dim, teacher_temp, 
                  student_temp=0.1):
         super().__init__()
@@ -110,10 +126,8 @@ class DINOLoss(nn.Module):
         self.register_buffer("center", torch.zeros(1, out_dim))
         self.teacher_temp = teacher_temp
 
-    # removed chunking and cumulative loss calculation
     def forward(self, student_output, teacher_output):
-        #Cross-entropy between softmax outputs of the teacher and student networks.
-        # Calculate the teacher and student losses for the entire tensors
+        # cross-entropy between softmax outputs for the teacher and student
         p_teacher = F.softmax((teacher_output - self.center) / self.teacher_temp, dim=-1)
         p_student = student_output / self.student_temp
         total_loss = torch.sum(-p_teacher * F.log_softmax(p_student, dim=-1), dim=-1).mean()
@@ -122,7 +136,7 @@ class DINOLoss(nn.Module):
 
 
 if __name__ == '__main__':
-    # Model parameters for the pre-trained SVT
+    # model parameters for the pre-trained SVT
     parser = argparse.ArgumentParser('Evaluation with linear classification on ImageNet')
     parser.add_argument('--n_last_blocks', default=4, type=int, help="""Concatenate [CLS] tokens
         for the `n` last blocks. We use `n=4` when evaluating ViT-Small and `n=1` with ViT-Base.""")
@@ -152,13 +166,9 @@ if __name__ == '__main__':
     parser.add_argument('--num_labels', default=1000, type=int, help='Number of labels for linear classifier')
     parser.add_argument('--dataset', default="ucf101", help='Dataset: ucf101 / hmdb51')
     parser.add_argument('--use_flow', default=False, type=utils.bool_flag, help="use flow teacher")
-
-    # config file
     parser.add_argument("--cfg", dest="cfg_file", help="Path to the config file", type=str,
                         default="models/configs/Kinetics/TimeSformer_divST_60x16_224.yaml")
     parser.add_argument("--opts", help="See utils/defaults.py for all options", default=None, nargs=argparse.REMAINDER)
-
-    # Model parameters
     parser.add_argument('--out_dim', default=768, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
@@ -172,10 +182,10 @@ if __name__ == '__main__':
         help="Whether to use batch normalizations in projection head (Default: False)")
 
     # parameters for the loss calculation, inlcuding the clips sizes, initial sampling rate and loss output path
-    args = parser.parse_args()
+    cfg = parser.parse_args()
     local_clip_size = 3
     global_clip_size = 30
     sampling_rate = 4
     file_path = 'loss_values/loss_kinetics_test_4_3_30.json'
 
-    dino_similarity(args, local_clip_size, global_clip_size, sampling_rate, file_path)
+    dino_similarity(cfg, local_clip_size, global_clip_size, sampling_rate, file_path)

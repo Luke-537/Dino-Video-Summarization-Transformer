@@ -11,6 +11,10 @@ from utils.parser import parse_args, load_config
 
 
 def finetuning():
+    """
+    Finetuning a TimeSformer model on Kinetics with the adaptive frame selection using the loss values.
+    """
+
     # Load pre-trained model
     model = TimesformerForVideoClassification.from_pretrained("timesformer_finetuning", ignore_mismatched_sizes=True)
     model.cuda()
@@ -19,14 +23,16 @@ def finetuning():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model.to(device)
 
+    # setting config parameters
     args = parse_args()
     args.cfg_file = "/home/reutemann/Dino-Video-Summarization-Transformer/models/configs/Kinetics/TimeSformer_divST_8x32_224.yaml"
     config = load_config(args)
     config.DATA.PATH_TO_DATA_DIR = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized/annotations"
     config.DATA.PATH_PREFIX = "/graphics/scratch2/students/reutemann/kinetics-dataset/k400_resized"
     config.DATASET = "Kinetics"
-    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_train_4_3_30.json"
-
+    
+    # initialising the training dataset with augmentations
+    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_train_4_3_30.json"
     dataset_train = FrameSelectionLoader(
         cfg=config,
         pre_sampling_rate=4,
@@ -36,9 +42,10 @@ def finetuning():
         return_type="Dict",
         mode = "train"
     )
+    print(f"Loaded dataset of length: {len(dataset_train)}")
 
-    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_kinetics_val_4_3_30.json"
-
+    # initialising the validation dataset without augmentations
+    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_kinetics_val_4_3_30.json"
     dataset_val = FrameSelectionLoader(
         cfg=config,
         pre_sampling_rate=4,
@@ -48,8 +55,9 @@ def finetuning():
         return_type="Dict",
         mode = "val"
     )
+    print(f"Loaded dataset of length: {len(dataset_val)}")
 
-    # Define training arguments
+    # define training arguments
     training_args = TrainingArguments(
         output_dir="/graphics/scratch2/students/reutemann/timesformer_finetuning",
         num_train_epochs=5,
@@ -62,7 +70,7 @@ def finetuning():
         evaluation_strategy="epoch",
     )
 
-    # Initialize Trainer
+    # initialize Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -70,20 +78,18 @@ def finetuning():
         eval_dataset=dataset_val
     )
 
-    # Train the model
+    # train the model
     trainer.train()
 
-    # Save the model
+    # save the model and extract the log history
     model.save_pretrained("/home/reutemann/Dino-Video-Summarization-Transformer/timesformer_finetuning")
-
-    # Assume 'trainer' is your Hugging Face Trainer object after training
     log_history = trainer.state.log_history
 
-    # Extract loss values
+    # extract loss values
     training_loss = [entry['loss'] for entry in log_history if 'loss' in entry]
     validation_loss = [entry['eval_loss'] for entry in log_history if 'eval_loss' in entry]
 
-    # Plotting
+    # plotting
     plt.plot(training_loss, label='Training Loss')
     plt.plot(validation_loss, label='Validation Loss')
     plt.xlabel('Epochs')
@@ -94,7 +100,7 @@ def finetuning():
     with open('eval_logs/training_log_history.json', 'w') as file:
         json.dump(log_history, file)
 
-    # Save the plot as PNG file
+    # save the plot as PNG file
     plt.savefig('eval_logs/finetuning_loss.png')
 
 
