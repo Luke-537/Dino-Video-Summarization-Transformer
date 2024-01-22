@@ -4,6 +4,8 @@ import sys
 sys.path.append('/home/reutemann/Dino-Video-Summarization-Transformer')
 import torch
 sys.path.append('/home/reutemann/Dino-Video-Summarization-Transformer/Video-LLaVA')
+import csv
+
 from llava.constants import X_TOKEN_INDEX, DEFAULT_X_TOKEN
 from llava.conversation import conv_templates, SeparatorStyle
 from llava.model.builder import load_pretrained_model
@@ -11,7 +13,7 @@ from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_X_token, get_model_name_from_path, KeywordsStoppingCriteria
 from utils.parser import parse_args, load_config
 from datasets_custom import FrameSelectionLoader
-import csv
+
 
 def main():
     disable_torch_init()
@@ -34,7 +36,7 @@ def main():
     config.DATA.PATH_TO_DATA_DIR = "/home/reutemann/Dino-Video-Summarization-Transformer/MSVD"
     config.DATA.PATH_PREFIX = "/graphics/scratch/datasets/MSVD/YouTubeClips"
     config.DATASET = "MSVD"
-    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values_new/loss_msvd_4_3_30.json"
+    config.LOSS_FILE = "/home/reutemann/Dino-Video-Summarization-Transformer/loss_values/loss_msvd_4_3_30.json"
 
     dataset = FrameSelectionLoader(
         cfg=config,
@@ -45,7 +47,7 @@ def main():
     )
     print(f"Loaded dataset of length: {len(dataset)}")
 
-    export_file = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive_test_2.csv"
+    export_file = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive.csv"
 
     key = ['video']
 

@@ -470,8 +470,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Epoch: [{}/{}]'.format(epoch, args.epochs)
     for it, (images, _, _, meta) in enumerate(metric_logger.log_every(data_loader, 10, header)):
-
-        #breakpoint()
         
         """
         save_tensor_as_video(images[0][0], "test_data/train_images/train_global_1.mp4")

@@ -1,14 +1,18 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import evaluate
 import pickle
+
 from pycocoevalcap.cider.cider import Cider
 
-def main(selection_method="adaptive"):
+def main(selection_method="adaptive", video_tag=None):
     
     if selection_method == "uniform":
         path = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_uniform.csv"
     else:
         path = "/home/reutemann/Dino-Video-Summarization-Transformer/eval_logs/captions_adaptive.csv"
     captions_dict = {}
+
     # Read the file line by line
     with open(path, 'r') as file:
         for line in file:
@@ -25,7 +29,8 @@ def main(selection_method="adaptive"):
     sorted_keys = sorted(captions_dict.keys())
     captions_ordered = {key: captions_dict[key] for key in sorted_keys}
 
-    captions_ordered = {"giLxPCgLLqg_9_19" : captions_ordered["giLxPCgLLqg_9_19"]}
+    if video_tag is not None:
+        captions_ordered = {video_tag : captions_ordered[video_tag]}
 
     truth_dict = {}
 
@@ -45,7 +50,8 @@ def main(selection_method="adaptive"):
     sorted_keys = sorted(truth_dict.keys())
     truth_ordered = {key: truth_dict[key] for key in sorted_keys}
 
-    truth_ordered = {"giLxPCgLLqg_9_19" : truth_ordered["giLxPCgLLqg_9_19"]}
+    if video_tag is not None:
+        truth_ordered = {video_tag : truth_ordered[video_tag]}
 
     keys_match_in_order = list(captions_ordered.keys()) == list(truth_ordered.keys())
 
@@ -66,12 +72,13 @@ def main(selection_method="adaptive"):
     predictions = []
     references = []
 
-    #for i in range(len(test_set)):
-    #    predictions.append(captions_ordered[test_set[i]][0])
-    #    references.append(truth_ordered[test_set[i]])
-
-    predictions.append(captions_ordered["giLxPCgLLqg_9_19"][0])
-    references.append(truth_ordered["giLxPCgLLqg_9_19"])
+    if video_tag is not None:
+        predictions.append(captions_ordered[video_tag][0])
+        references.append(truth_ordered[video_tag])
+    else:
+        for i in range(len(test_set)):
+            predictions.append(captions_ordered[test_set[i]][0])
+            references.append(truth_ordered[test_set[i]])
     
     # calculate BERT score
     bert = evaluate.load("bertscore")
@@ -92,12 +99,12 @@ def main(selection_method="adaptive"):
     bleu = evaluate.load("meteor")
     meteor_score = bleu.compute(predictions=predictions, references=references)
 
-    print("BLEU", bleu_score, )
+    print("BLEU", bleu_score)
     print("METEOR", meteor_score)
     print("BERT", bert_score)
     print("CIDEr", cider_score)
 
 
 if __name__== "__main__":
-    main("uniform")
-    main("adaptve")
+    main("uniform", video_tag="rOic25PnIx8_1_3")
+    main("adaptve", video_tag="rOic25PnIx8_1_3")
